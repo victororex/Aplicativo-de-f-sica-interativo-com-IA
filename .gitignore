@@ -13,3 +13,25 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Ambiente virtual
+.venv/
+venv/
+ia-fisica/venv/
+
+# Chaves e variáveis de ambiente
+.env
+*.env
+
+# Cache do Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Configurações locais do VS Code
+.vscode/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
