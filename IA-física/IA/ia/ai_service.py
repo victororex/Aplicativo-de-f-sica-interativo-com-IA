@@ -11,7 +11,7 @@ load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 USE_MOCK_AI = os.getenv("USE_MOCK_AI", "true").lower() == "true"
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
+MODEL_NAME = os.getenv("MODEL_NAME", "gpt-5.4")
 
 
 def imagem_para_base64(caminho_imagem: str) -> str:
