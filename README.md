@@ -805,6 +805,3 @@ Essa separação deixa o projeto mais seguro, organizado e fácil de evoluir.
 Licença
 
 Projeto acadêmico desenvolvido para fins educacionais.
-
-
-Minha crítica direta: o README sozinho não salva projeto bagunçado. O ponto mais importante é vocês **não deixarem a chave da IA dentro do app Kotlin**. Isso seria um erro grave, porque qualquer pessoa poderia extrair a chave do APK. A IA tem que ficar no back-end, e o app só conversa com a API de vocês.
