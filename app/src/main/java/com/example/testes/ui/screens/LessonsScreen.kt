@@ -10,39 +10,62 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.testes.model.Lesson
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.testes.model.Subject
+import com.example.testes.ui.components.AppHeroPanel
+import com.example.testes.ui.components.AppScreenBackground
 import com.example.testes.ui.components.AppTopBar
+import com.example.testes.ui.components.MiniPhysicsMark
+import com.example.testes.viewmodel.LessonsViewModel
 
 @Composable
 fun LessonsScreen(
     onModuleSelect: (String) -> Unit,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    viewModel: LessonsViewModel = viewModel()
 ) {
-    // Mock modules with progress
-    val modules = listOf(
-        Triple("Mecânica", 1.0f, true),
-        Triple("Termologia", 0.4f, false),
-        Triple("Eletromagnetismo", 0.0f, false),
-        Triple("Ótica", 0.0f, false)
-    )
+    val subjects by viewModel.subjects.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
 
     Scaffold(
-        topBar = { AppTopBar(title = "Matérias", onBackClick = onBackClick) }
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = { AppTopBar(title = "Materias", onBackClick = onBackClick) }
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
-        ) {
-            items(modules) { (name, progress, isCompleted) ->
-                ModuleCard(
-                    name = name,
-                    progress = progress,
-                    isCompleted = isCompleted,
-                    onClick = { onModuleSelect(name) }
-                )
-                Spacer(modifier = Modifier.height(12.dp))
+        AppScreenBackground(modifier = Modifier.padding(padding)) {
+            when {
+                isLoading && subjects.isEmpty() -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+                errorMessage != null && subjects.isEmpty() -> {
+                    Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                        Text(errorMessage ?: "Nao foi possivel carregar as materias.")
+                    }
+                }
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        item {
+                            AppHeroPanel(
+                                title = "Biblioteca",
+                                subtitle = "Aulas organizadas por materia, com seu progresso sempre atualizado."
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                        }
+
+                        items(subjects) { subject ->
+                            ModuleCard(
+                                subject = subject,
+                                onClick = { onModuleSelect(subject.id) }
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -50,47 +73,70 @@ fun LessonsScreen(
 
 @Composable
 fun ModuleCard(
-    name: String,
-    progress: Float,
-    isCompleted: Boolean,
+    subject: Subject,
     onClick: () -> Unit
 ) {
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isCompleted) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surfaceVariant
-        )
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = name,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isCompleted) Color(0xFF2E7D32) else Color.Gray
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                if (isCompleted) {
-                    Text("Concluído", color = Color(0xFF2E7D32), style = MaterialTheme.typography.labelMedium)
+                MiniPhysicsMark()
+                Spacer(modifier = Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = subject.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        subject.examFocus,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                if (subject.isCompleted) {
+                    AssistChip(
+                        onClick = {},
+                        label = { Text("Concluido") },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = Color(0xFFE3F7E8),
+                            labelColor = Color(0xFF247A3D)
+                        )
+                    )
                 }
             }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            LinearProgressIndicator(
-                progress = { progress },
-                modifier = Modifier.fillMaxWidth(),
-                color = if (isCompleted) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary,
-                trackColor = Color.LightGray
-            )
-            
+
+            Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = "${(progress * 100).toInt()}%",
-                style = MaterialTheme.typography.labelSmall,
+                subject.description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            LinearProgressIndicator(
+                progress = { subject.progress },
+                modifier = Modifier.fillMaxWidth().height(8.dp),
+                color = if (subject.isCompleted) Color(0xFF2FA84F) else MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "${subject.completedLessons}/${subject.totalLessons} aulas - ${(subject.progress * 100).toInt()}%",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.align(Alignment.End)
             )
         }

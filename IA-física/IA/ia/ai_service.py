@@ -11,7 +11,8 @@ load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 USE_MOCK_AI = os.getenv("USE_MOCK_AI", "true").lower() == "true"
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-5.4")
+MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
+AI_TIMEOUT_SECONDS = float(os.getenv("AI_TIMEOUT_SECONDS", "30"))
 
 
 def imagem_para_base64(caminho_imagem: str) -> str:
@@ -30,7 +31,7 @@ def responder_texto(pergunta: str) -> str:
         return "Erro: OPENAI_API_KEY não encontrada no arquivo .env."
 
     try:
-        client = OpenAI(api_key=OPENAI_API_KEY)
+        client = OpenAI(api_key=OPENAI_API_KEY, timeout=AI_TIMEOUT_SECONDS)
 
         resposta = client.responses.create(
             model=MODEL_NAME,
@@ -74,7 +75,7 @@ tabelas ou desenhos de Física.
         return "Erro: OPENAI_API_KEY não encontrada no arquivo .env."
 
     try:
-        client = OpenAI(api_key=OPENAI_API_KEY)
+        client = OpenAI(api_key=OPENAI_API_KEY, timeout=AI_TIMEOUT_SECONDS)
 
         imagem_base64 = imagem_para_base64(caminho_imagem)
 
@@ -141,7 +142,7 @@ A IA usaria o conteúdo do documento para responder à pergunta do aluno.
         return "Erro: OPENAI_API_KEY não encontrada no arquivo .env."
 
     try:
-        client = OpenAI(api_key=OPENAI_API_KEY)
+        client = OpenAI(api_key=OPENAI_API_KEY, timeout=AI_TIMEOUT_SECONDS)
 
         prompt_documento = f"""
 Use o documento abaixo como fonte de apoio para responder à pergunta do aluno.

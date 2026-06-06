@@ -8,6 +8,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.testes.data.api.SessionManager
 import com.example.testes.ui.screens.*
 import com.example.testes.viewmodel.*
 
@@ -88,7 +89,12 @@ fun SetupNavGraph(
         }
 
         composable(Screen.StudyCampaign.route) {
-            StudyCampaignScreen(onBackClick = { navController.popBackStack() })
+            StudyCampaignScreen(
+                onBackClick = { navController.popBackStack() },
+                onSubjectClick = { subjectId ->
+                    navController.navigate(Screen.ModuleDetail.createRoute(subjectId))
+                }
+            )
         }
 
         composable(Screen.ImprovementStats.route) {
@@ -143,6 +149,7 @@ fun SetupNavGraph(
             ProfileScreen(
                 viewModel = profileViewModel,
                 onLogout = {
+                    SessionManager.clear()
                     navController.navigate(Screen.Login.route) {
                         popUpTo(0) { inclusive = true }
                     }
@@ -178,7 +185,9 @@ fun SetupNavGraph(
             ModuleDetailScreen( // Reusing the grid layout for lessons of the subject
                 moduleName = subjectName,
                 onBackClick = { navController.popBackStack() },
-                onLessonClick = { /* Navigate to specific lesson if needed */ }
+                onLessonClick = { lessonId ->
+                    navController.navigate(Screen.LessonDetail.createRoute(lessonId))
+                }
             )
         }
         

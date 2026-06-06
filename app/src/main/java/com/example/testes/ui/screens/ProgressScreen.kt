@@ -2,6 +2,7 @@ package com.example.testes.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -16,6 +17,7 @@ fun ProgressScreen(
     onBackClick: () -> Unit
 ) {
     val progress by viewModel.progress.collectAsState()
+    val subjects by viewModel.subjects.collectAsState()
 
     Scaffold(
         topBar = { AppTopBar(title = "Meu Progresso", onBackClick = onBackClick) }
@@ -29,20 +31,21 @@ fun ProgressScreen(
             item {
                 Text(text = "Resumo Geral", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(16.dp))
-                ProgressCard(title = "Física I - Geral", progress = progress.overallCompletion)
+                ProgressCard(title = "Fisica do Ensino Medio - Geral", progress = progress.overallCompletion)
+                Text(
+                    text = "Modulo atual: ${progress.currentModule.ifBlank { "Comece uma aula" }}",
+                    style = MaterialTheme.typography.bodyMedium
+                )
                 Spacer(modifier = Modifier.height(24.dp))
             }
-            
+
             item {
-                Text(text = "Módulos", style = MaterialTheme.typography.titleLarge)
+                Text(text = "Materias", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(16.dp))
             }
-            
-            // Mock module progress
-            items(1) {
-                ProgressCard(title = "Mecânica Clássica", progress = 0.6f)
-                ProgressCard(title = "Termodinâmica", progress = 0.1f)
-                ProgressCard(title = "Eletromagnetismo", progress = 0.0f)
+
+            items(subjects) { subject ->
+                ProgressCard(title = subject.name, progress = subject.progress)
             }
         }
     }

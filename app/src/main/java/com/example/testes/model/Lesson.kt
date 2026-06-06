@@ -5,5 +5,8 @@ data class Lesson(
     val title: String,
     val description: String,
     val content: String,
-    val module: String
+    val module: String,
+    val subjectId: String = "",
+    val examTags: String = "",
+    val isCompleted: Boolean = false
 )

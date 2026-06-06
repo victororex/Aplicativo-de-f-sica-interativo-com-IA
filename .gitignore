@@ -2,6 +2,7 @@
 *.iml
 .gradle
 /local.properties
+/.idea/
 /.idea/caches
 /.idea/libraries
 /.idea/modules.xml
@@ -22,6 +23,8 @@
 /build
 /app/build
 /captures
+codex-screen.png
+codex_app_screen.png
 
 # Native build
 .externalNativeBuild
@@ -41,6 +44,9 @@ __pycache__/
 *.pyd
 .env
 *.env
+backend/data/
+backend/*.sqlite3
+backend/uploads/
 
 # VS Code
 .vscode/
