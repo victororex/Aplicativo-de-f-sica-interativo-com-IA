@@ -1,10 +1,8 @@
 package com.example.testes.data.api
 
+import com.example.testes.data.local.LocalBackend
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 
 data class ImprovementStatsResponse(
     val accuracyRate: Int,
@@ -22,34 +20,10 @@ data class ImprovementStatsResponse(
         }
 }
 
-class StatsApiClient(
-    private val baseUrl: String = "http://10.0.2.2:8000"
-) {
+class StatsApiClient {
     suspend fun getImprovementStats(): Result<ImprovementStatsResponse> = withContext(Dispatchers.IO) {
         runCatching {
-            val url = URL("$baseUrl/stats/improvement")
-            val connection = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 10_000
-                readTimeout = 15_000
-                setRequestProperty("Accept", "application/json")
-                SessionManager.accessToken?.let { token ->
-                    setRequestProperty("Authorization", "Bearer $token")
-                }
-            }
-
-            val stream = if (connection.responseCode in 200..299) {
-                connection.inputStream
-            } else {
-                connection.errorStream
-            }
-
-            val responseBody = stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-            if (connection.responseCode !in 200..299) {
-                error("Erro ${connection.responseCode}: $responseBody")
-            }
-
-            val json = JSONObject(responseBody)
+            val json = LocalBackend.improvementStats(SessionManager.accessToken)
             ImprovementStatsResponse(
                 accuracyRate = json.optInt("accuracy_rate"),
                 studyQuality = json.optString("study_quality", "Sem dados"),

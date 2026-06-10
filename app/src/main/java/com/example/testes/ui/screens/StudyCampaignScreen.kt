@@ -84,7 +84,7 @@ fun StudyCampaignScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(title = "Campanha", onBackClick = onBackClick) }
+        topBar = { AppTopBar(title = "Campanha de Desafios", onBackClick = onBackClick) }
     ) { padding ->
         AppScreenBackground(modifier = Modifier.padding(padding)) {
             when {
@@ -99,8 +99,8 @@ fun StudyCampaignScreen(
                 ) {
                     item {
                         AppHeroPanel(
-                            title = "Mapa de fases",
-                            subtitle = "Avance por desafios visuais da materia e prove que entendeu a cena."
+                            title = "Mapa da campanha",
+                            subtitle = "Resolva exercicios de Analise Dimensional e desbloqueie as proximas fases."
                         )
                     }
                     itemsIndexed(nodes) { index, node ->
@@ -251,12 +251,15 @@ private fun StageMission(
     val correct = exercise != null && selectedOption == exercise.correctIndex
     val completed = exerciseIndex >= exercises.size
 
+    LaunchedEffect(completed, savedCompletion, node.id, correctAnswers, exercises.size) {
+        if (completed && !savedCompletion) {
+            savedCompletion = true
+            onStageCompleted(node, correctAnswers, exercises.size)
+        }
+    }
+
     Column(modifier = Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (completed) {
-            if (!savedCompletion) {
-                savedCompletion = true
-                onStageCompleted(node, correctAnswers, exercises.size)
-            }
             Surface(
                 shape = MaterialTheme.shapes.large,
                 color = Color(0xFFE3F8F3),
@@ -366,41 +369,11 @@ private fun List<CampaignNode>.unlockAfter(nodeId: String, score: Int, total: In
 }
 
 private fun fallbackCampaignExercises(subjectId: String, visualType: String): List<CampaignExercise> {
-    return when (subjectId) {
-        "mecanica" -> listOf(
-            CampaignExercise("mecanica-1", "Qual bloco muda de movimento com mais facilidade?", listOf("O mais leve", "O mais pesado", "Os dois iguais"), 0, "Com o mesmo empurrao, o mais leve acelera mais.", "motion"),
-            CampaignExercise("mecanica-2", "Se o bloco nao se mexe, o que pode estar acontecendo?", listOf("As forcas se equilibram", "Ele perdeu a massa", "O tempo parou"), 0, "Quando as forcas se equilibram, o movimento nao muda.", "motion"),
-            CampaignExercise("mecanica-3", "Linha mais inclinada no movimento indica:", listOf("Maior rapidez", "Mais calor", "Menos luz"), 0, "A inclinacao mostra que a rapidez cresce mais.", "motion")
-        )
-        "termologia" -> listOf(
-            CampaignExercise("termologia-1", "Para onde o calor vai?", listOf("Do quente para o frio", "Do frio para o quente", "Para lugar nenhum"), 0, "O calor vai naturalmente do mais quente para o mais frio.", "heat"),
-            CampaignExercise("termologia-2", "Linha reta durante aquecimento pode indicar:", listOf("Mudanca de estado", "Massa sumindo", "Luz refletindo"), 0, "A energia esta mudando o estado do material.", "heat"),
-            CampaignExercise("termologia-3", "Quem perde calor primeiro?", listOf("O mais quente", "O mais frio", "Os dois frios"), 0, "O objeto mais quente entrega energia.", "heat")
-        )
-        "ondulatoria" -> listOf(
-            CampaignExercise("ondulatoria-1", "Som mais agudo aparece como:", listOf("Onda mais apertada", "Onda mais espalhada", "Linha parada"), 0, "Mais repeticoes em menos tempo indicam som mais agudo.", "wave"),
-            CampaignExercise("ondulatoria-2", "Crista mais alta indica:", listOf("Mais intensidade", "Mais peso", "Mais frio"), 0, "A altura mostra a intensidade da onda.", "wave"),
-            CampaignExercise("ondulatoria-3", "Distancia entre cristas mostra:", listOf("Tamanho da onda", "Peso da onda", "Cor da onda"), 0, "Essa distancia e o comprimento da onda.", "wave")
-        )
-        "optica" -> listOf(
-            CampaignExercise("optica-1", "Quando caminhos da luz se encontram:", listOf("A imagem aparece", "A luz some", "O objeto pesa mais"), 0, "A imagem se forma onde os raios se encontram.", "light"),
-            CampaignExercise("optica-2", "No espelho, a luz:", listOf("Volta em outro caminho", "Sempre vira calor", "Perde tudo"), 0, "A luz reflete.", "light"),
-            CampaignExercise("optica-3", "A lente ajuda porque:", listOf("Muda o caminho da luz", "Corta o objeto", "Aumenta a massa"), 0, "A lente desvia a luz para formar imagem.", "light")
-        )
-        "eletromagnetismo" -> listOf(
-            CampaignExercise("eletro-1", "A lampada acende quando:", listOf("O caminho esta fechado", "O fio esta cortado", "Nao ha energia"), 0, "A energia precisa circular pelo caminho completo.", "circuit"),
-            CampaignExercise("eletro-2", "Se o fio e cortado:", listOf("A lampada apaga", "Brilha mais", "Vira ima"), 0, "Sem caminho completo, a energia nao circula.", "circuit"),
-            CampaignExercise("eletro-3", "A bateria serve para:", listOf("Empurrar a energia", "Esfriar a lampada", "Cortar o fio"), 0, "A bateria faz a energia circular.", "circuit")
-        )
-        "fisica-moderna" -> listOf(
-            CampaignExercise("moderna-1", "No centro do atomo fica:", listOf("O nucleo", "Uma lampada", "Uma onda sonora"), 0, "O nucleo fica no centro.", "atom"),
-            CampaignExercise("moderna-2", "Parece invisivel porque estuda coisas:", listOf("Muito pequenas", "Muito barulhentas", "Muito lentas"), 0, "Sao fenomenos pequenos demais para ver diretamente.", "atom"),
-            CampaignExercise("moderna-3", "Ao redor do nucleo ha:", listOf("Uma regiao de particulas", "Uma lente", "Um fio cortado"), 0, "O modelo ajuda a imaginar a regiao ao redor do nucleo.", "atom")
-        )
-        else -> listOf(
-            CampaignExercise("$subjectId-1", "Qual e o primeiro passo para entender um problema?", listOf("Observar a situacao", "Chutar", "Pular a leitura"), 0, "Observe a cena antes de responder.", visualType)
-        )
-    }
+    return listOf(
+        CampaignExercise("$subjectId-base-1", "Qual dimensao representa comprimento?", listOf("[L]", "[M]", "[T]", "[F]"), 0, "Comprimento e representado por [L].", visualType),
+        CampaignExercise("$subjectId-base-2", "A expressao v = d/t resulta em:", listOf("[L][T]^-1", "[M][L]", "[T]^2", "[L]^2"), 0, "Distancia dividida por tempo gera [L][T]^-1.", visualType),
+        CampaignExercise("$subjectId-base-3", "Podemos somar massa com tempo?", listOf("Nao", "Sim", "So com calculadora", "Sempre"), 0, "Somas exigem grandezas de mesma dimensao.", visualType)
+    )
 }
 
 @Composable
@@ -408,6 +381,37 @@ private fun CampaignVisual(type: String) {
     val primary = MaterialTheme.colorScheme.primary
     Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
         when (type) {
+            "dimension" -> {
+                drawRoundRect(Color(0xFFDDEAFF), topLeft = Offset(34f, 24f), size = Size(size.width - 68f, 102f))
+                drawLine(primary, Offset(58f, 58f), Offset(size.width - 58f, 58f), strokeWidth = 4f, cap = StrokeCap.Round)
+                drawLine(primary.copy(alpha = 0.55f), Offset(58f, 88f), Offset(size.width - 58f, 88f), strokeWidth = 4f, cap = StrokeCap.Round)
+                drawCircle(Color(0xFFFFC857), radius = 15f, center = Offset(82f, 58f))
+                drawCircle(Color(0xFFFF6B5F), radius = 15f, center = Offset(82f, 88f))
+                drawCircle(primary, radius = 15f, center = Offset(size.width - 82f, 58f))
+            }
+            "formula" -> {
+                drawRoundRect(Color(0xFFE8EEF9), topLeft = Offset(36f, 32f), size = Size(size.width - 72f, 86f))
+                drawLine(primary, Offset(62f, 76f), Offset(size.width * 0.38f, 76f), strokeWidth = 8f, cap = StrokeCap.Round)
+                drawLine(Color(0xFFFFC857), Offset(size.width * 0.46f, 56f), Offset(size.width * 0.46f, 96f), strokeWidth = 6f, cap = StrokeCap.Round)
+                drawLine(Color(0xFFFFC857), Offset(size.width * 0.42f, 76f), Offset(size.width * 0.50f, 76f), strokeWidth = 6f, cap = StrokeCap.Round)
+                drawLine(primary, Offset(size.width * 0.58f, 62f), Offset(size.width - 62f, 62f), strokeWidth = 8f, cap = StrokeCap.Round)
+                drawLine(primary.copy(alpha = 0.55f), Offset(size.width * 0.58f, 94f), Offset(size.width - 92f, 94f), strokeWidth = 8f, cap = StrokeCap.Round)
+            }
+            "check" -> {
+                drawRoundRect(Color(0xFFE3F8F3), topLeft = Offset(34f, 28f), size = Size(size.width * 0.36f, 86f))
+                drawRoundRect(Color(0xFFFFEFE9), topLeft = Offset(size.width * 0.58f, 28f), size = Size(size.width * 0.30f, 86f))
+                drawLine(Color(0xFF00A99D), Offset(62f, 72f), Offset(90f, 98f), strokeWidth = 8f, cap = StrokeCap.Round)
+                drawLine(Color(0xFF00A99D), Offset(90f, 98f), Offset(size.width * 0.36f, 54f), strokeWidth = 8f, cap = StrokeCap.Round)
+                drawLine(Color(0xFFFF6B5F), Offset(size.width * 0.64f, 48f), Offset(size.width * 0.84f, 98f), strokeWidth = 8f, cap = StrokeCap.Round)
+                drawLine(Color(0xFFFF6B5F), Offset(size.width * 0.84f, 48f), Offset(size.width * 0.64f, 98f), strokeWidth = 8f, cap = StrokeCap.Round)
+            }
+            "energy" -> {
+                val center = Offset(size.width / 2f, 78f)
+                drawCircle(Color(0xFFDDEAFF), radius = 56f, center = center)
+                drawCircle(primary, radius = 20f, center = center)
+                drawLine(Color(0xFFFFC857), Offset(center.x - 86f, center.y + 42f), Offset(center.x + 86f, center.y - 42f), strokeWidth = 7f, cap = StrokeCap.Round)
+                drawCircle(Color(0xFFFF6B5F), radius = 12f, center = Offset(center.x + 76f, center.y - 36f))
+            }
             "motion" -> {
                 drawRect(Color(0xFF4DD0E1), topLeft = Offset(90f, 78f), size = Size(92f, 48f))
                 drawRect(Color(0xFFFFB74D), topLeft = Offset(size.width - 220f, 58f), size = Size(140f, 68f))

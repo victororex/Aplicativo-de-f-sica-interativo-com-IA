@@ -45,8 +45,8 @@ fun ImprovementStatsScreen(onBackClick: () -> Unit) {
             ) {
                 item {
                     AppHeroPanel(
-                        title = "Seu desempenho",
-                        subtitle = "Um resumo simples do seu ritmo, acertos e caminho concluido."
+                        title = "Sua evolucao",
+                        subtitle = "Veja acertos, tempo de estudo, perguntas feitas e fases vencidas."
                     )
                 }
 
@@ -60,7 +60,7 @@ fun ImprovementStatsScreen(onBackClick: () -> Unit) {
                                 color = MaterialTheme.colorScheme.surface
                             ) {
                                 Column(modifier = Modifier.padding(18.dp)) {
-                                    Text("Taxa de acerto", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("Acertos nos exercicios", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Text("${current.accuracyRate}%", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.ExtraBold)
                                     Spacer(modifier = Modifier.height(8.dp))
@@ -73,10 +73,10 @@ fun ImprovementStatsScreen(onBackClick: () -> Unit) {
                                 }
                             }
                             Spacer(modifier = Modifier.height(12.dp))
-                            StatItem("Qualidade de Estudo", current.studyQuality, Icons.Default.Star, Color(0xFFFFC857))
-                            StatItem("Horas Estudadas", current.studiedTimeLabel, Icons.Default.Schedule, Color(0xFF00A99D))
-                            StatItem("Perguntas Feitas", current.questionsAsked.toString(), Icons.Default.HistoryEdu, Color(0xFFFF6B5F))
-                            StatItem("Fases Completadas", "${current.completedPhases} / ${current.totalPhases}", Icons.Default.QueryStats, Color(0xFF4C6FFF))
+                            StatItem("Como esta indo", current.studyQuality, Icons.Default.Star, Color(0xFFFFC857))
+                            StatItem("Tempo estudando", current.studiedTimeLabel, Icons.Default.Schedule, Color(0xFF2454D6))
+                            StatItem("Perguntas ao titio Renato", current.questionsAsked.toString(), Icons.Default.HistoryEdu, Color(0xFFFF6B5F))
+                            StatItem("Fases vencidas", "${current.completedPhases} / ${current.totalPhases}", Icons.Default.QueryStats, Color(0xFF4C6FFF))
                         }
                         errorMessage != null -> Text(text = errorMessage!!, color = MaterialTheme.colorScheme.error)
                         else -> Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }

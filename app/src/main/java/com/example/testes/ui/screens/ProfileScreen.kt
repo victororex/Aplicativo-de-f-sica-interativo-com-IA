@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,6 +26,7 @@ fun ProfileScreen(
     onLogout: () -> Unit,
     onSeeGeneralProgress: () -> Unit,
     onSettingsClick: () -> Unit,
+    onSupportClick: () -> Unit,
     onBackClick: () -> Unit
 ) {
     val user by viewModel.user.collectAsState()
@@ -77,8 +79,8 @@ fun ProfileScreen(
                 Spacer(modifier = Modifier.height(18.dp))
 
                 ProfileOptionItem(
-                    title = "Meu progresso nas materias",
-                    subtitle = "Resumo por area e percentual concluido",
+                    title = "Meu progresso",
+                    subtitle = "Resumo da sua evolucao na demo",
                     icon = Icons.Default.BarChart,
                     onClick = onSeeGeneralProgress
                 )
@@ -88,6 +90,13 @@ fun ProfileScreen(
                     subtitle = "Editar conta e preferencias",
                     icon = Icons.Default.Settings,
                     onClick = onSettingsClick
+                )
+
+                ProfileOptionItem(
+                    title = "Suporte",
+                    subtitle = "Ajuda para entrar, recuperar senha ou relatar problema",
+                    icon = Icons.Default.Info,
+                    onClick = onSupportClick
                 )
 
                 Spacer(modifier = Modifier.weight(1f))
@@ -100,7 +109,7 @@ fun ProfileScreen(
                 ) {
                     Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Sair da conta")
+                    Text("Sair e entrar com outro usuario")
                 }
             }
         }

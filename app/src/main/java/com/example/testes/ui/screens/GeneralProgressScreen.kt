@@ -58,7 +58,7 @@ fun GeneralProgressScreen(
                             modifier = Modifier.weight(1f)
                         )
                         ProgressSummaryCard(
-                            label = "Materias",
+                            label = "Tema",
                             value = subjects.size.toString(),
                             iconColor = Color(0xFFFFC857),
                             modifier = Modifier.weight(1f)

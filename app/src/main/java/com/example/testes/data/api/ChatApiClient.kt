@@ -1,11 +1,10 @@
 package com.example.testes.data.api
 
+import com.example.testes.data.local.LocalBackend
+import com.example.testes.model.ChatMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
-import java.net.URL
 
 data class QuestionRequest(
     val sessionId: Int? = null,
@@ -20,47 +19,10 @@ data class AiResponse(
     val aiResponse: String
 )
 
-class ChatApiClient(
-    private val baseUrl: String = "http://10.0.2.2:8000"
-) {
+class ChatApiClient {
     suspend fun sendMessage(request: QuestionRequest): Result<AiResponse> = withContext(Dispatchers.IO) {
         runCatching {
-            val url = URL("$baseUrl/chat/message")
-            val connection = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = 10_000
-                readTimeout = 30_000
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                setRequestProperty("Accept", "application/json")
-                SessionManager.accessToken?.let { token ->
-                    setRequestProperty("Authorization", "Bearer $token")
-                }
-            }
-
-            val body = JSONObject().apply {
-                put("session_id", request.sessionId)
-                put("message", request.message)
-                put("subject", request.subject)
-                put("level", request.level)
-            }.toString()
-
-            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
-                writer.write(body)
-            }
-
-            val stream = if (connection.responseCode in 200..299) {
-                connection.inputStream
-            } else {
-                connection.errorStream
-            }
-
-            val responseBody = stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-            if (connection.responseCode !in 200..299) {
-                error("Erro ${connection.responseCode}: $responseBody")
-            }
-
-            val json = JSONObject(responseBody)
+            val json = LocalBackend.chat(SessionManager.accessToken, request.message)
             AiResponse(
                 sessionId = json.optIntOrNull("session_id"),
                 userMessage = json.optString("user_message"),
@@ -69,40 +31,23 @@ class ChatApiClient(
         }
     }
 
-    suspend fun synthesizeSpeech(text: String): Result<ByteArray> = withContext(Dispatchers.IO) {
+    suspend fun getHistory(): Result<List<ChatMessage>> = withContext(Dispatchers.IO) {
         runCatching {
-            val url = URL("$baseUrl/chat/speech")
-            val connection = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = 10_000
-                readTimeout = 45_000
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                setRequestProperty("Accept", "audio/mpeg")
-                SessionManager.accessToken?.let { token ->
-                    setRequestProperty("Authorization", "Bearer $token")
-                }
+            val array = LocalBackend.chatHistory(SessionManager.accessToken)
+            List(array.length()) { index ->
+                val json = array.getJSONObject(index)
+                ChatMessage(
+                    id = json.optLong("time", System.currentTimeMillis() + index).toString(),
+                    text = json.optString("text"),
+                    isFromUser = json.optBoolean("from_user"),
+                    timestamp = json.optLong("time", System.currentTimeMillis())
+                )
             }
-
-            val body = JSONObject().apply {
-                put("text", text)
-            }.toString()
-
-            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
-                writer.write(body)
-            }
-
-            val stream = if (connection.responseCode in 200..299) {
-                connection.inputStream
-            } else {
-                connection.errorStream
-            }
-            val bytes = stream.use { it.readBytes() }
-            if (connection.responseCode !in 200..299) {
-                error("Nao consegui gerar a voz agora.")
-            }
-            bytes
         }
+    }
+
+    suspend fun synthesizeSpeech(text: String): Result<ByteArray> = withContext(Dispatchers.IO) {
+        Result.failure(IllegalStateException("Voz remota desativada na demo local."))
     }
 }
 

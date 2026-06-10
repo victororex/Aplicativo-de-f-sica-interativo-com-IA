@@ -50,7 +50,7 @@ fun DailyChallengeScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(title = "Desafio Diario", onBackClick = onBackClick) }
+        topBar = { AppTopBar(title = "Desafio de Analise", onBackClick = onBackClick) }
     ) { padding ->
         AppScreenBackground(modifier = Modifier.padding(padding)) {
             Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -63,8 +63,8 @@ fun DailyChallengeScreen(
                         val question = questions[currentQuestionIndex]
                         Column(modifier = Modifier.fillMaxSize()) {
                             AppHeroPanel(
-                                title = "Sprint de hoje",
-                                subtitle = "Responda uma vez por dia e acompanhe sua consistencia."
+                                title = "Desafio diario",
+                                subtitle = "Responda uma vez por dia. Depois de concluir, ele fica salvo ate amanha."
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Surface(

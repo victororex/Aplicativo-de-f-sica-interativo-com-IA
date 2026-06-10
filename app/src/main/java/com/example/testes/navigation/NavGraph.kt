@@ -49,7 +49,9 @@ fun SetupNavGraph(
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 },
-                onRegisterClick = { navController.navigate(Screen.Register.route) }
+                onRegisterClick = { navController.navigate(Screen.Register.route) },
+                onForgotPassword = { navController.navigate(Screen.Support.route) },
+                onSupportClick = { navController.navigate(Screen.Support.route) }
             )
         }
         
@@ -71,12 +73,7 @@ fun SetupNavGraph(
                 onDailyChallenge = { navController.navigate(Screen.DailyChallenge.route) },
                 onStudyCampaign = { navController.navigate(Screen.StudyCampaign.route) },
                 onChatDoubt = { navController.navigate(Screen.Chat.route) },
-                onImprovementStats = { navController.navigate(Screen.ImprovementStats.route) },
-                onBackClick = { 
-                    if (!navController.popBackStack()) {
-                        // If no backstack, maybe go to a default or do nothing
-                    }
-                }
+                onImprovementStats = { navController.navigate(Screen.ImprovementStats.route) }
             )
         }
 
@@ -156,12 +153,17 @@ fun SetupNavGraph(
                 },
                 onSeeGeneralProgress = { navController.navigate(Screen.GeneralProgress.route) },
                 onSettingsClick = { navController.navigate(Screen.Settings.route) },
+                onSupportClick = { navController.navigate(Screen.Support.route) },
                 onBackClick = { navController.popBackStack() }
             )
         }
         
         composable(Screen.Settings.route) {
             SettingsScreen(onBackClick = { navController.popBackStack() })
+        }
+
+        composable(Screen.Support.route) {
+            SupportScreen(onBackClick = { navController.popBackStack() })
         }
 
         composable(Screen.AvatarCustomization.route) {

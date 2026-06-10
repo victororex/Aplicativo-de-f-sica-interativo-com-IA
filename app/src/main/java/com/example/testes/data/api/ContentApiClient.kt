@@ -1,5 +1,6 @@
 package com.example.testes.data.api
 
+import com.example.testes.data.local.LocalBackend
 import com.example.testes.model.Lesson
 import com.example.testes.model.Progress
 import com.example.testes.model.Subject
@@ -8,15 +9,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
-import java.net.URL
 
-class ContentApiClient(
-    private val baseUrl: String = "http://10.0.2.2:8000"
-) {
-    suspend fun getCurrentUser(): Result<User> = get("/auth/me") { json ->
-        parseUser(json)
+class ContentApiClient {
+    suspend fun getCurrentUser(): Result<User> = withContext(Dispatchers.IO) {
+        runCatching {
+            parseUser(LocalBackend.currentUser(SessionManager.accessToken))
+        }
     }
 
     suspend fun updateCurrentUser(
@@ -25,96 +23,68 @@ class ContentApiClient(
         phone: String?,
         privateAccount: Boolean,
         notificationsEnabled: Boolean
-    ): Result<User> =
-        request(
-            path = "/users/me",
-            method = "PUT",
-            body = JSONObject().apply {
-                put("name", name)
-                put("email", email)
-                put("phone", phone)
-                put("private_account", privateAccount)
-                put("notifications_enabled", notificationsEnabled)
+    ): Result<User> = withContext(Dispatchers.IO) {
+        runCatching {
+            val user = parseUser(
+                LocalBackend.updateCurrentUser(
+                    SessionManager.accessToken,
+                    name,
+                    email,
+                    phone,
+                    privateAccount,
+                    notificationsEnabled
+                )
+            )
+            SessionManager.user?.let {
+                SessionManager.saveSession(
+                    AuthResponse(
+                        accessToken = SessionManager.accessToken.orEmpty(),
+                        tokenType = "local",
+                        user = AuthUser(
+                            id = user.id.toIntOrNull() ?: it.id,
+                            name = user.name,
+                            email = user.email,
+                            phone = user.phone,
+                            privateAccount = user.privateAccount,
+                            notificationsEnabled = user.notificationsEnabled
+                        )
+                    )
+                )
             }
-        ) { json -> parseUser(json) }
-
-    suspend fun getSubjects(): Result<List<Subject>> = getArray("/content/subjects") { array ->
-        List(array.length()) { index -> parseSubject(array.getJSONObject(index)) }
+            user
+        }
     }
 
-    suspend fun getLessons(subjectId: String): Result<List<Lesson>> =
-        getArray("/content/subjects/$subjectId/lessons") { array ->
+    suspend fun getSubjects(): Result<List<Subject>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val array = LocalBackend.subjects(SessionManager.accessToken)
+            List(array.length()) { index -> parseSubject(array.getJSONObject(index)) }
+        }
+    }
+
+    suspend fun getLessons(subjectId: String): Result<List<Lesson>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val array = LocalBackend.lessons(SessionManager.accessToken, subjectId)
             List(array.length()) { index -> parseLessonSummary(array.getJSONObject(index)) }
         }
+    }
 
-    suspend fun getLesson(lessonId: String): Result<Lesson> =
-        get("/content/lessons/$lessonId") { json -> parseLessonDetail(json) }
-
-    suspend fun getProgress(): Result<Progress> =
-        get("/progress/summary") { json -> parseProgress(json) }
-
-    suspend fun completeLesson(lessonId: String): Result<Progress> =
-        request(
-            path = "/progress/lessons/$lessonId/complete",
-            method = "POST",
-            body = null
-        ) { json -> parseProgress(json) }
-
-    private suspend fun <T> get(path: String, parser: (JSONObject) -> T): Result<T> =
-        request(path = path, method = "GET", body = null, parser = parser)
-
-    private suspend fun <T> getArray(path: String, parser: (JSONArray) -> T): Result<T> = withContext(Dispatchers.IO) {
+    suspend fun getLesson(lessonId: String): Result<Lesson> = withContext(Dispatchers.IO) {
         runCatching {
-            val response = execute(path = path, method = "GET", body = null)
-            parser(JSONArray(response))
+            parseLessonDetail(LocalBackend.lesson(SessionManager.accessToken, lessonId))
         }
     }
 
-    private suspend fun <T> request(
-        path: String,
-        method: String,
-        body: JSONObject?,
-        parser: (JSONObject) -> T
-    ): Result<T> = withContext(Dispatchers.IO) {
+    suspend fun getProgress(): Result<Progress> = withContext(Dispatchers.IO) {
         runCatching {
-            val response = execute(path = path, method = method, body = body)
-            parser(JSONObject(response))
+            parseProgress(LocalBackend.progressSummary(SessionManager.accessToken))
         }
     }
 
-    private fun execute(path: String, method: String, body: JSONObject?): String {
-        val url = URL("$baseUrl$path")
-        val connection = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = method
-            connectTimeout = 10_000
-            readTimeout = 20_000
-            setRequestProperty("Accept", "application/json")
-            SessionManager.accessToken?.let { token ->
-                setRequestProperty("Authorization", "Bearer $token")
-            }
-            if (body != null) {
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            }
+    suspend fun completeLesson(lessonId: String): Result<Progress> = withContext(Dispatchers.IO) {
+        runCatching {
+            parseProgress(LocalBackend.completeLesson(SessionManager.accessToken, lessonId))
         }
-        if (body != null) {
-            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
-                writer.write(body.toString())
-            }
-        }
-        val stream = if (connection.responseCode in 200..299) {
-            connection.inputStream
-        } else {
-            connection.errorStream
-        }
-        val responseBody = stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-        if (connection.responseCode !in 200..299) {
-            val message = runCatching {
-                JSONObject(responseBody).optString("detail", responseBody)
-            }.getOrDefault(responseBody)
-            error("Erro ${connection.responseCode}: $message")
-        }
-        return responseBody
     }
 
     private fun parseSubject(json: JSONObject): Subject {

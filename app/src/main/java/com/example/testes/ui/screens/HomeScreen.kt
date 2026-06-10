@@ -27,8 +27,7 @@ fun HomeScreen(
     onDailyChallenge: () -> Unit,
     onStudyCampaign: () -> Unit,
     onChatDoubt: () -> Unit,
-    onImprovementStats: () -> Unit,
-    onBackClick: () -> Unit
+    onImprovementStats: () -> Unit
 ) {
     val user by viewModel.user.collectAsState()
     val showQuizPopup by viewModel.showQuizPopup.collectAsState()
@@ -37,7 +36,7 @@ fun HomeScreen(
         AlertDialog(
             onDismissRequest = { viewModel.dismissQuizPopup() },
             title = { Text("Novo desafio") },
-            text = { Text("Um quiz diario de fisica esta disponivel para hoje.") },
+            text = { Text("Um desafio diario de Analise Dimensional esta disponivel.") },
             confirmButton = {
                 Button(onClick = {
                     viewModel.dismissQuizPopup()
@@ -56,7 +55,7 @@ fun HomeScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(title = "Fisica Interativa", onBackClick = onBackClick) }
+        topBar = { AppTopBar(title = "Titio Renato Fisica") }
     ) { padding ->
         AppScreenBackground(modifier = Modifier.padding(padding)) {
             Column(
@@ -70,7 +69,7 @@ fun HomeScreen(
 
                 AppHeroPanel(
                     title = "Ola, ${user.name}",
-                    subtitle = "Escolha uma trilha, tire duvidas por voz e acompanhe sua evolucao."
+                    subtitle = "Estude Analise Dimensional com aulas, desafios e conversa guiada."
                 )
 
                 Spacer(modifier = Modifier.height(18.dp))
@@ -94,7 +93,7 @@ fun HomeScreen(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Sua sessao esta pronta para estudar com aulas, trilha e conversa guiada.",
+                                text = "Tudo roda no proprio app: aulas, campanha, progresso e chat.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -114,7 +113,7 @@ fun HomeScreen(
 
                 HomeMenuButton(
                     title = "Desafio Diario",
-                    subtitle = "Questoes rapidas para aquecer",
+                    subtitle = "Questoes rapidas de Analise Dimensional",
                     icon = Icons.Default.EmojiEvents,
                     accent = Color(0xFFFFC857),
                     onClick = onDailyChallenge
@@ -123,8 +122,8 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 HomeMenuButton(
-                    title = "Campanha de Estudo",
-                    subtitle = "Trilha guiada por materia",
+                    title = "Campanha de Desafios",
+                    subtitle = "Fases com exercicios visuais",
                     icon = Icons.Default.Map,
                     accent = MaterialTheme.colorScheme.primary,
                     onClick = onStudyCampaign
@@ -133,8 +132,8 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 HomeMenuButton(
-                    title = "Chat de Duvidas",
-                    subtitle = "Converse escrevendo ou falando",
+                    title = "Converse com o titio Renato",
+                    subtitle = "Pergunte por texto ou voz",
                     icon = Icons.AutoMirrored.Filled.Chat,
                     accent = Color(0xFFFF6B5F),
                     onClick = onChatDoubt
