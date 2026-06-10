@@ -123,6 +123,31 @@ public final class LocalBackend {
         throw new IllegalArgumentException("Usuario nao encontrado.");
     }
 
+    public static void deleteCurrentUser(String token) throws JSONException {
+        int userId = userIdFromToken(token);
+        JSONArray users = users();
+        JSONArray remaining = new JSONArray();
+        boolean found = false;
+
+        for (int i = 0; i < users.length(); i++) {
+            JSONObject user = users.getJSONObject(i);
+            if (user.optInt("id") == userId) {
+                found = true;
+            } else {
+                remaining.put(user);
+            }
+        }
+
+        if (!found) {
+            throw new IllegalArgumentException("Usuario nao encontrado.");
+        }
+
+        clearLearningState(userId);
+        prefs.edit()
+                .putString("users", remaining.toString())
+                .apply();
+    }
+
     public static JSONArray subjects(String token) throws JSONException {
         int total = lessonsData().length();
         int completed = completedLessons(token).length();
@@ -218,6 +243,22 @@ public final class LocalBackend {
                 "Em E = m.v^2, temos [M]([L][T]^-1)^2 = [M][L]^2[T]^-2.",
                 "Medio"
         ));
+        questions.put(question(
+                "daily-5",
+                "Qual alternativa combina com potencia, isto e, energia por tempo?",
+                new String[]{"[M][L]^2[T]^-3", "[M][L]^2[T]^-1", "[M][L][T]^-2", "[L][T]^-3"},
+                0,
+                "Potencia e energia dividida por tempo. Entao [P] = [M][L]^2[T]^-2 / [T] = [M][L]^2[T]^-3.",
+                "Medio"
+        ));
+        questions.put(question(
+                "daily-6",
+                "Um numero como 2, 1/2 ou pi muda a dimensao da formula?",
+                new String[]{"Nao", "Sim, vira massa", "Sim, vira tempo", "So quando tem unidade"},
+                0,
+                "Numeros puros nao carregam unidade. Eles podem mudar o valor, mas nao a dimensao.",
+                "Facil"
+        ));
         return questions;
     }
 
@@ -311,20 +352,38 @@ public final class LocalBackend {
         int userId = userIdFromToken(token);
         String cleanMessage = message == null ? "" : message.trim();
         String answer = Tutor.answer(cleanMessage);
-        long now = System.currentTimeMillis();
-
-        JSONArray history = chatHistory(token);
-        history.put(new JSONObject().put("from_user", true).put("text", cleanMessage).put("time", now));
-        history.put(new JSONObject().put("from_user", false).put("text", answer).put("time", now + 1));
-        history = trimHistory(history, 60);
-
-        prefs.edit().putString(key(userId, "chat_history"), history.toString()).apply();
+        saveChatExchange(token, cleanMessage, answer);
         addStats(userId, 0, 0, 0, 1, 45);
 
         return new JSONObject()
                 .put("session_id", userId)
                 .put("user_message", cleanMessage)
                 .put("ai_response", answer);
+    }
+
+    public static JSONObject saveChatExchange(String token, String message, String answer) throws JSONException {
+        int userId = userIdFromToken(token);
+        String cleanMessage = message == null ? "" : message.trim();
+        String cleanAnswer = answer == null || answer.trim().isEmpty()
+                ? Tutor.answer(cleanMessage)
+                : answer.trim();
+        long now = System.currentTimeMillis();
+
+        JSONArray history = chatHistory(token);
+        history.put(new JSONObject().put("from_user", true).put("text", cleanMessage).put("time", now));
+        history.put(new JSONObject().put("from_user", false).put("text", cleanAnswer).put("time", now + 1));
+        history = trimHistory(history, 60);
+
+        prefs.edit().putString(key(userId, "chat_history"), history.toString()).apply();
+
+        return new JSONObject()
+                .put("session_id", userId)
+                .put("user_message", cleanMessage)
+                .put("ai_response", cleanAnswer);
+    }
+
+    public static String localTutorAnswer(String message) {
+        return Tutor.answer(message == null ? "" : message.trim());
     }
 
     public static JSONArray chatHistory(String token) throws JSONException {
@@ -352,21 +411,21 @@ public final class LocalBackend {
                 "intro",
                 "Introducao a Analise Dimensional",
                 "Entenda por que conferir dimensoes evita erros antes dos calculos.",
-                "A analise dimensional verifica se uma expressao fisica faz sentido antes de substituir numeros.\n\nIdeia central: em uma igualdade, os dois lados precisam representar a mesma natureza fisica.\n\nExemplo visual: 3 metros e 2 segundos podem aparecer no mesmo problema, mas nao podem ser somados. Metro mede comprimento. Segundo mede tempo.\n\nUse isso como um detector de erros: se as dimensoes nao combinam, a formula precisa ser revista.",
+                "A analise dimensional e uma revisao de sentido fisico. Antes de trocar letras por numeros, ela pergunta: os dois lados da formula falam da mesma coisa?\n\nImagine duas caixas: uma guarda medidas de comprimento e outra guarda medidas de tempo. Voce pode comparar valores dentro da mesma caixa, mas nao pode somar uma medida da caixa de comprimento com uma medida da caixa de tempo.\n\nRegra principal:\nem uma igualdade, os dois lados precisam ter a mesma dimensao.\n\nExemplo visual:\n3 metros representam comprimento.\n2 segundos representam tempo.\n3 m + 2 s nao forma uma grandeza fisica clara.\n\nA analise dimensional funciona como um detector de incoerencia. Se as dimensoes nao combinam, a formula precisa ser revista antes de qualquer conta.",
                 1
         ));
         list.put(lessonData(
                 "grandezas",
                 "Grandezas, medidas e unidades",
                 "Separe grandeza, numero e unidade com exemplos do dia a dia.",
-                "Grandeza fisica e aquilo que pode ser medido: comprimento, massa, tempo, velocidade, forca e energia.\n\nMedida e o valor completo: em 5 m, o numero e 5 e a unidade e metro.\n\nUnidade e o padrao usado para comparar: metro para comprimento, segundo para tempo, quilograma para massa.\n\nTrocar unidade nao troca grandeza: 100 cm e 1 m continuam sendo comprimento.",
+                "Grandeza fisica e aquilo que pode ser medido: comprimento, massa, tempo, velocidade, forca, energia e potencia.\n\nMedida e o pacote completo. Em 5 m, o numero e 5 e a unidade e metro.\n\nUnidade e o padrao de comparacao. Metro mede comprimento, segundo mede tempo e quilograma mede massa.\n\nTrocar unidade nao troca a natureza da grandeza:\n100 cm e 1 m continuam sendo comprimento.\n60 s e 1 min continuam sendo tempo.\n\nQuando uma questao parecer confusa, separe em tres partes:\n1. qual grandeza aparece;\n2. qual numero aparece;\n3. qual unidade acompanha esse numero.",
                 2
         ));
         list.put(lessonData(
                 "fundamentais",
                 "Dimensoes fundamentais",
                 "Use [M], [L] e [T] para representar massa, comprimento e tempo.",
-                "Nesta demo vamos usar tres dimensoes fundamentais.\n\n[M] representa massa.\n[L] representa comprimento.\n[T] representa tempo.\n\nGrandezas derivadas nascem da combinacao delas. Area e [L]^2, volume e [L]^3, velocidade e [L][T]^-1.\n\nNumeros puros, como 2 ou 1/2, nao mudam a dimensao.",
+                "Nesta demo vamos usar tres dimensoes fundamentais.\n\n[M] representa massa.\n[L] representa comprimento.\n[T] representa tempo.\n\nAs outras grandezas nascem da combinacao dessas tres.\n\nArea:\ncomprimento vezes comprimento\n[A] = [L].[L] = [L]^2\n\nVolume:\ncomprimento vezes comprimento vezes comprimento\n[V] = [L]^3\n\nVelocidade:\ncomprimento dividido por tempo\n[v] = [L][T]^-1\n\nNumeros puros, como 2, 1/2 ou pi, nao mudam a dimensao. Eles mudam o valor da conta, mas nao a natureza fisica.",
                 3
         ));
         list.put(lessonData(
@@ -380,14 +439,14 @@ public final class LocalBackend {
                 "metodo",
                 "Metodo passo a passo",
                 "Siga uma sequencia simples para resolver qualquer questao.",
-                "Passo 1: destaque as grandezas que aparecem na formula.\n\nPasso 2: escreva a dimensao de cada uma.\n\nPasso 3: substitua as grandezas por [M], [L] e [T].\n\nPasso 4: simplifique as potencias.\n\nPasso 5: compare os dois lados. Se forem diferentes, a expressao esta incoerente.\n\nDica: resolva primeiro com letras e dimensoes. So depois pense nos numeros.",
+                "Passo 1: destaque as grandezas que aparecem na formula.\n\nPasso 2: escreva a dimensao de cada uma.\n\nPasso 3: substitua as grandezas por [M], [L] e [T].\n\nPasso 4: simplifique as potencias.\n\nPasso 5: compare os dois lados. Se forem diferentes, a expressao esta incoerente.\n\nExemplo guiado:\nqueremos testar x = v.t.\n\n[x] = [L]\n[v] = [L][T]^-1\n[t] = [T]\n\nLado direito:\n[v].[t] = [L][T]^-1.[T] = [L]\n\nOs dois lados viraram [L]. A expressao e coerente.\n\nDica: primeiro resolva com dimensoes. So depois use numeros.",
                 5
         ));
         list.put(lessonData(
                 "exemplos",
                 "Exemplos resolvidos",
                 "Veja conferencias completas de formulas comuns.",
-                "Exemplo 1: v = d/t\nO lado direito e [L]/[T], entao [v] = [L][T]^-1. Coerente.\n\nExemplo 2: F = m.a\nO lado direito e [M].[L][T]^-2, entao [F] = [M][L][T]^-2. Coerente.\n\nExemplo 3: x = v + t\nVelocidade e tempo nao tem a mesma dimensao. A expressao esta incoerente.\n\nExemplo 4: E = m.v^2\n[M]([L][T]^-1)^2 = [M][L]^2[T]^-2. Isso bate com energia.",
+                "Exemplo 1: v = d/t\nDistancia e [L]. Tempo e [T].\nO lado direito fica [L]/[T] = [L][T]^-1.\nLogo, velocidade tem dimensao [L][T]^-1.\n\nExemplo 2: F = m.a\nMassa e [M]. Aceleracao e [L][T]^-2.\nO lado direito fica [M].[L][T]^-2 = [M][L][T]^-2.\nEssa e a dimensao de forca.\n\nExemplo 3: x = v + t\nVelocidade e [L][T]^-1. Tempo e [T].\nComo as dimensoes sao diferentes, nao podemos somar esses termos. A expressao esta incoerente.\n\nExemplo 4: E = m.v^2\n[M]([L][T]^-1)^2 = [M][L]^2[T]^-2.\nEssa e a dimensao de energia.\n\nExemplo 5: P = E/t\n[P] = [M][L]^2[T]^-2 / [T] = [M][L]^2[T]^-3.",
                 6
         ));
         list.put(lessonData(
@@ -439,7 +498,8 @@ public final class LocalBackend {
                 new String[][]{
                         {"camp-base-1", "A medida 12 m representa qual grandeza?", "Comprimento|Tempo|Massa|Energia", "0", "Metro mede comprimento, cuja dimensao e [L]."},
                         {"camp-base-2", "Qual simbolo representa massa?", "[M]|[L]|[T]|[A]", "0", "Massa e representada por [M]."},
-                        {"camp-base-3", "Area tem qual dimensao?", "[L]^2|[L]^3|[M][L]|[T]^2", "0", "Area e comprimento vezes comprimento: [L]^2."}
+                        {"camp-base-3", "Area tem qual dimensao?", "[L]^2|[L]^3|[M][L]|[T]^2", "0", "Area e comprimento vezes comprimento: [L]^2."},
+                        {"camp-base-4", "Volume de um cubo depende de tres comprimentos. Qual dimensao aparece?", "[L]^3|[L]^2|[M][L]|[T]^3", "0", "Volume combina largura, altura e profundidade: [L].[L].[L] = [L]^3."}
                 }
         ));
         list.put(stage(
@@ -451,7 +511,8 @@ public final class LocalBackend {
                 new String[][]{
                         {"camp-formulas-1", "Velocidade tem dimensao:", "[L][T]^-1|[L][T]|[M][T]|[T][L]^-2", "0", "Velocidade e distancia dividida pelo tempo."},
                         {"camp-formulas-2", "Aceleracao tem dimensao:", "[L][T]^-2|[M][L]|[T]^2|[M][T]^-1", "0", "Aceleracao e velocidade dividida por tempo."},
-                        {"camp-formulas-3", "Forca, em F = m.a, tem dimensao:", "[M][L][T]^-2|[M][T]|[L]^2|[M]^2[L]", "0", "Multiplique massa por aceleracao."}
+                        {"camp-formulas-3", "Forca, em F = m.a, tem dimensao:", "[M][L][T]^-2|[M][T]|[L]^2|[M]^2[L]", "0", "Multiplique massa por aceleracao."},
+                        {"camp-formulas-4", "Quantidade de movimento p = m.v tem dimensao:", "[M][L][T]^-1|[M][L]^2[T]^-2|[L][T]^-1|[M][T]^-2", "0", "Massa e [M], velocidade e [L][T]^-1. O produto fica [M][L][T]^-1."}
                 }
         ));
         list.put(stage(
@@ -463,7 +524,8 @@ public final class LocalBackend {
                 new String[][]{
                         {"camp-check-1", "A expressao x = v.t e coerente?", "Sim|Nao|So se v for massa|Nunca com tempo", "0", "Velocidade vezes tempo resulta em comprimento."},
                         {"camp-check-2", "A expressao v = d + t e coerente?", "Nao|Sim|Sempre depende do numero|So no SI", "0", "Nao se soma comprimento com tempo."},
-                        {"camp-check-3", "Em uma igualdade fisica, os dois lados devem ter:", "A mesma dimensao|O mesmo numero|A mesma letra|A mesma unidade sempre", "0", "A igualdade precisa comparar grandezas da mesma natureza."}
+                        {"camp-check-3", "Em uma igualdade fisica, os dois lados devem ter:", "A mesma dimensao|O mesmo numero|A mesma letra|A mesma unidade sempre", "0", "A igualdade precisa comparar grandezas da mesma natureza."},
+                        {"camp-check-4", "A expressao area = velocidade.tempo e coerente?", "Nao|Sim|So em queda livre|So no grafico", "0", "Velocidade vezes tempo resulta em comprimento [L], nao em area [L]^2."}
                 }
         ));
         list.put(stage(
@@ -475,7 +537,8 @@ public final class LocalBackend {
                 new String[][]{
                         {"camp-final-1", "A dimensao de E = m.v^2 e:", "[M][L]^2[T]^-2|[M][L][T]^-2|[L]^2[T]^-1|[M]^2[L]", "0", "Eleve a velocidade ao quadrado e multiplique por massa."},
                         {"camp-final-2", "Se P = F.v, qual a dimensao de potencia?", "[M][L]^2[T]^-3|[M][L][T]^-1|[L][T]^-2|[M][T]^2", "0", "Forca e [M][L][T]^-2; velocidade e [L][T]^-1."},
-                        {"camp-final-3", "Um coeficiente sem unidade e chamado de:", "Adimensional|Fundamental|Temporal|Vetorial", "0", "Grandezas sem unidade tem dimensao 1."}
+                        {"camp-final-3", "Um coeficiente sem unidade e chamado de:", "Adimensional|Fundamental|Temporal|Vetorial", "0", "Grandezas sem unidade tem dimensao 1."},
+                        {"camp-final-4", "Se uma formula passa no teste dimensional, isso prova que ela esta certa?", "Nao, so mostra coerencia|Sim, prova tudo|Sim, se tiver metros|Nao, porque dimensao nao existe", "0", "O teste dimensional encontra erros, mas nao garante constantes, sinais ou o modelo completo."}
                 }
         ));
         return list;

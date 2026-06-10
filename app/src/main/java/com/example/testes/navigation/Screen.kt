@@ -25,7 +25,6 @@ sealed class Screen(val route: String) {
         fun createRoute(subjectName: String) = "subject_detail/${Uri.encode(subjectName)}"
     }
     object Settings : Screen("settings")
-    object AvatarCustomization : Screen("avatar_customization")
     object Register : Screen("register")
     object Support : Screen("support")
 }

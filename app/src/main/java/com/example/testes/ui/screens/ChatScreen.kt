@@ -3,6 +3,7 @@ package com.example.testes.ui.screens
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.MediaPlayer
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -48,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.example.testes.data.api.ChatApiClient
 import com.example.testes.ui.components.AppHeroPanel
 import com.example.testes.ui.components.AppScreenBackground
 import com.example.testes.ui.components.AppTopBar
@@ -55,20 +57,25 @@ import com.example.testes.ui.components.ChatMessageBubble
 import com.example.testes.ui.components.VoiceButton
 import com.example.testes.viewmodel.ChatViewModel
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.Locale
 
 @Composable
 fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
     val context = LocalContext.current
     val messages by viewModel.messages.collectAsState()
+    val isSending by viewModel.isSending.collectAsState()
+    val statusMessage by viewModel.statusMessage.collectAsState()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val chatApiClient = remember { ChatApiClient() }
     var textState by remember { mutableStateOf("") }
     var isListening by remember { mutableStateOf(false) }
     var voiceStatus by remember { mutableStateOf<String?>(null) }
     var lastSpokenMessageId by remember { mutableStateOf("1") }
     var ttsReady by remember { mutableStateOf(false) }
     var voiceResponsesEnabled by rememberSaveable { mutableStateOf(false) }
+    var activePlayer by remember { mutableStateOf<MediaPlayer?>(null) }
 
     val textToSpeech = remember {
         TextToSpeech(context) { status ->
@@ -101,7 +108,39 @@ fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
     }
 
     fun stopSpeech() {
+        activePlayer?.runCatchingStop()
+        activePlayer = null
         textToSpeech.stop()
+    }
+
+    fun playRemoteSpeech(bytes: ByteArray): Boolean {
+        if (bytes.isEmpty()) return false
+        return runCatching {
+            val audioFile = File.createTempFile("titio-renato-", ".mp3", context.cacheDir)
+            audioFile.writeBytes(bytes)
+            val player = MediaPlayer()
+            player.setDataSource(audioFile.absolutePath)
+            player.setOnCompletionListener {
+                it.release()
+                audioFile.delete()
+                if (activePlayer === it) {
+                    activePlayer = null
+                }
+                voiceStatus = null
+            }
+            player.setOnErrorListener { mediaPlayer, _, _ ->
+                mediaPlayer.release()
+                audioFile.delete()
+                if (activePlayer === mediaPlayer) {
+                    activePlayer = null
+                }
+                false
+            }
+            player.prepare()
+            activePlayer = player
+            player.start()
+            true
+        }.getOrDefault(false)
     }
 
     fun speakWithDeviceVoice(text: String, flush: Boolean = true) {
@@ -125,8 +164,15 @@ fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
         if (!voiceResponsesEnabled) return
         scope.launch {
             stopSpeech()
-            voiceStatus = "Titio Renato esta falando."
-            speakWithDeviceVoice(text, flush)
+            voiceStatus = "Titio Renato esta preparando a fala."
+            val remoteSpeech = chatApiClient.synthesizeSpeech(text)
+            val playedRemote = remoteSpeech.getOrNull()?.let { playRemoteSpeech(it) } == true
+            if (playedRemote) {
+                voiceStatus = "Titio Renato esta falando."
+            } else {
+                voiceStatus = "Usando a voz do aparelho."
+                speakWithDeviceVoice(text, flush)
+            }
         }
     }
 
@@ -300,7 +346,7 @@ fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
                     }
                 }
 
-                voiceStatus?.let {
+                (voiceStatus ?: statusMessage)?.let {
                     Text(
                         text = it,
                         style = MaterialTheme.typography.labelMedium,
@@ -344,6 +390,7 @@ fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
                         value = textState,
                         onValueChange = { textState = it },
                         modifier = Modifier.weight(1f),
+                        enabled = !isSending,
                         placeholder = { Text(if (isListening) "Ouvindo..." else "Pergunte sobre uma formula...") },
                         shape = MaterialTheme.shapes.medium
                     )
@@ -358,11 +405,18 @@ fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
                         Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Ouvir ultima resposta")
                     }
 
-                    IconButton(onClick = {
-                        viewModel.sendMessage(textState)
-                        textState = ""
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Enviar", tint = MaterialTheme.colorScheme.primary)
+                    IconButton(
+                        enabled = !isSending && textState.isNotBlank(),
+                        onClick = {
+                            viewModel.sendMessage(textState)
+                            textState = ""
+                        }
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Enviar",
+                            tint = if (isSending) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }
@@ -449,4 +503,11 @@ private fun String.chunkForSpeech(maxLength: Int = 185): List<String> {
 
 private fun String.chunkForHumanSpeech(maxLength: Int = 520): List<String> {
     return chunkForSpeech(maxLength).filter { it.isNotBlank() }
+}
+
+private fun MediaPlayer.runCatchingStop() {
+    runCatching {
+        stop()
+        release()
+    }
 }

@@ -55,6 +55,13 @@ class ContentApiClient {
         }
     }
 
+    suspend fun deleteCurrentUser(): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            LocalBackend.deleteCurrentUser(SessionManager.accessToken)
+            SessionManager.clear()
+        }
+    }
+
     suspend fun getSubjects(): Result<List<Subject>> = withContext(Dispatchers.IO) {
         runCatching {
             val array = LocalBackend.subjects(SessionManager.accessToken)

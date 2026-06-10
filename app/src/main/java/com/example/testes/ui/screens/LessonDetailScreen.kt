@@ -10,8 +10,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.testes.data.api.ContentApiClient
@@ -176,16 +174,7 @@ private fun VisualDemoCard(lesson: Lesson) {
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(8.dp))
-            when (lesson.subjectId) {
-                "analise-dimensional" -> DimensionalLessonVisual(lesson.id)
-                "mecanica" -> MechanicsVisual(lesson.id)
-                "termologia" -> ThermalVisual()
-                "ondulatoria" -> WaveVisual()
-                "optica" -> OpticsVisual()
-                "eletromagnetismo" -> CircuitVisual()
-                "fisica-moderna" -> ModernPhysicsVisual()
-                else -> GenericVisual()
-            }
+            DimensionalLessonVisual(lesson.id)
         }
     }
 }
@@ -231,104 +220,4 @@ private fun DimensionalLessonVisual(lessonId: String) {
         "Troque cada grandeza por [M], [L] e [T], simplifique e compare os dois lados.",
         style = MaterialTheme.typography.labelMedium
     )
-}
-
-@Composable
-private fun MechanicsVisual(lessonId: String) {
-    if (lessonId == "leis-de-newton") {
-        Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
-            val center = Offset(size.width * 0.45f, size.height * 0.55f)
-            drawRect(Color(0xFF90CAF9), topLeft = Offset(center.x - 60, center.y - 35), size = androidx.compose.ui.geometry.Size(120f, 70f))
-            drawLine(Color(0xFFE53935), center, Offset(center.x + 170, center.y), strokeWidth = 8f)
-            drawLine(Color(0xFF43A047), center, Offset(center.x, center.y - 90), strokeWidth = 8f)
-            drawLine(Color(0xFF5E35B1), center, Offset(center.x, center.y + 90), strokeWidth = 8f)
-        }
-        Text("Um bloco sendo empurrado para o lado enquanto o chao sustenta o peso.", style = MaterialTheme.typography.labelMedium)
-    } else {
-        Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
-            val baseY = size.height * 0.8f
-            drawLine(Color.Gray, Offset(40f, baseY), Offset(size.width - 40f, baseY), strokeWidth = 4f)
-            drawLine(Color(0xFF1976D2), Offset(80f, baseY - 10), Offset(size.width - 80f, baseY - 110), strokeWidth = 8f)
-            drawCircle(Color(0xFFE53935), radius = 14f, center = Offset(size.width - 80f, baseY - 110))
-        }
-        Text("Linha de movimento: quanto mais inclinada, mais rapido o objeto esta.", style = MaterialTheme.typography.labelMedium)
-    }
-}
-
-@Composable
-private fun ThermalVisual() {
-    Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
-        val left = 70f
-        val bottom = size.height - 25f
-        drawLine(Color.Gray, Offset(left, bottom), Offset(size.width - 40f, bottom), strokeWidth = 4f)
-        drawLine(Color.Gray, Offset(left, bottom), Offset(left, 20f), strokeWidth = 4f)
-        drawLine(Color(0xFFE53935), Offset(left, bottom - 10), Offset(size.width * 0.38f, bottom - 85), strokeWidth = 7f)
-        drawLine(Color(0xFFE53935), Offset(size.width * 0.38f, bottom - 85), Offset(size.width * 0.62f, bottom - 85), strokeWidth = 7f)
-        drawLine(Color(0xFFE53935), Offset(size.width * 0.62f, bottom - 85), Offset(size.width - 50f, bottom - 125), strokeWidth = 7f)
-    }
-    Text("Quando a linha sobe, a temperatura aumenta. Quando fica reta, acontece uma mudanca de estado.", style = MaterialTheme.typography.labelMedium)
-}
-
-@Composable
-private fun WaveVisual() {
-    Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
-        val mid = size.height / 2
-        var previous = Offset(0f, mid)
-        for (x in 0..size.width.toInt() step 8) {
-            val y = mid + kotlin.math.sin(x / 34f) * 38f
-            val current = Offset(x.toFloat(), y)
-            drawLine(Color(0xFF1976D2), previous, current, strokeWidth = 5f)
-            previous = current
-        }
-        drawLine(Color.Gray, Offset(0f, mid), Offset(size.width, mid), strokeWidth = 2f)
-    }
-    Text("A distancia entre dois pontos altos mostra o tamanho de uma onda.", style = MaterialTheme.typography.labelMedium)
-}
-
-@Composable
-private fun OpticsVisual() {
-    Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
-        val lensX = size.width * 0.52f
-        drawOval(Color(0x663F51B5), topLeft = Offset(lensX - 18, 20f), size = androidx.compose.ui.geometry.Size(36f, size.height - 40f))
-        drawLine(Color(0xFFFFC107), Offset(25f, 40f), Offset(lensX, 70f), strokeWidth = 5f)
-        drawLine(Color(0xFFFFC107), Offset(lensX, 70f), Offset(size.width - 35f, size.height * 0.5f), strokeWidth = 5f)
-        drawLine(Color(0xFFFFC107), Offset(25f, 110f), Offset(lensX, 80f), strokeWidth = 5f)
-        drawLine(Color(0xFFFFC107), Offset(lensX, 80f), Offset(size.width - 35f, size.height * 0.5f), strokeWidth = 5f)
-    }
-    Text("Os caminhos da luz se encontram no ponto onde a imagem aparece.", style = MaterialTheme.typography.labelMedium)
-}
-
-@Composable
-private fun CircuitVisual() {
-    Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
-        val c = Color(0xFF263238)
-        drawRect(c, topLeft = Offset(70f, 35f), size = androidx.compose.ui.geometry.Size(size.width - 140f, 80f), style = Stroke(width = 5f))
-        drawRect(Color(0xFFFFCC80), topLeft = Offset(size.width * 0.45f, 25f), size = androidx.compose.ui.geometry.Size(70f, 25f))
-        drawCircle(Color(0xFFFFEB3B), radius = 18f, center = Offset(size.width - 110f, 75f))
-        drawLine(Color(0xFFE53935), Offset(45f, 115f), Offset(95f, 115f), strokeWidth = 8f)
-    }
-    Text("Quando o caminho esta fechado, a energia circula e acende a lampada.", style = MaterialTheme.typography.labelMedium)
-}
-
-@Composable
-private fun ModernPhysicsVisual() {
-    Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
-        val center = Offset(size.width * 0.5f, size.height * 0.55f)
-        drawCircle(Color(0xFFE53935), radius = 18f, center = center)
-        drawOval(Color(0x553F51B5), topLeft = Offset(center.x - 120, center.y - 35), size = androidx.compose.ui.geometry.Size(240f, 70f), style = Stroke(width = 4f))
-        drawOval(Color(0x553F51B5), topLeft = Offset(center.x - 35, center.y - 85), size = androidx.compose.ui.geometry.Size(70f, 170f), style = Stroke(width = 4f))
-        drawCircle(Color(0xFF1976D2), radius = 9f, center = Offset(center.x + 100, center.y))
-    }
-    Text("Uma visao simples do centro do atomo e das particulas ao redor.", style = MaterialTheme.typography.labelMedium)
-}
-
-@Composable
-private fun GenericVisual() {
-    Surface(color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = "Observe as informacoes e acompanhe cada passo com calma.",
-            modifier = Modifier.padding(12.dp),
-            fontFamily = FontFamily.Monospace
-        )
-    }
 }

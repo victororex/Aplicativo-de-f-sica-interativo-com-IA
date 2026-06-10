@@ -100,7 +100,7 @@ class LessonsViewModel(
                     _subjects.value = it
                     _errorMessage.value = null
                 }
-                .onFailure { _errorMessage.value = "Nao consegui mostrar as materias agora." }
+                .onFailure { _errorMessage.value = "Nao consegui mostrar as aulas agora." }
             _isLoading.value = false
         }
     }
@@ -133,6 +133,12 @@ class ChatViewModel(
     )
     val messages: StateFlow<List<ChatMessage>> = _messages
 
+    private val _isSending = MutableStateFlow(false)
+    val isSending: StateFlow<Boolean> = _isSending
+
+    private val _statusMessage = MutableStateFlow<String?>(null)
+    val statusMessage: StateFlow<String?> = _statusMessage
+
     init {
         loadHistory()
     }
@@ -146,10 +152,12 @@ class ChatViewModel(
     }
 
     fun sendMessage(text: String) {
-        if (text.isBlank()) return
+        if (text.isBlank() || _isSending.value) return
 
         val userMsg = ChatMessage(System.currentTimeMillis().toString(), text, true)
         _messages.value = _messages.value + userMsg
+        _isSending.value = true
+        _statusMessage.value = "Titio Renato esta pensando..."
 
         viewModelScope.launch {
             val response = chatApiClient.sendMessage(
@@ -159,11 +167,14 @@ class ChatViewModel(
                     level = "universitario"
                 )
             )
-            val answer = response.getOrNull()?.aiResponse
+            val responseValue = response.getOrNull()
+            val answer = responseValue?.aiResponse
                 ?: "Nao consegui responder agora. Tente novamente em alguns instantes."
 
             val aiMsg = ChatMessage((System.currentTimeMillis() + 1).toString(), answer, false)
             _messages.value = _messages.value + aiMsg
+            _statusMessage.value = responseValue?.fallbackReason
+            _isSending.value = false
         }
     }
 }
