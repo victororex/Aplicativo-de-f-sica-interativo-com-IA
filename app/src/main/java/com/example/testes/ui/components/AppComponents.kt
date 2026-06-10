@@ -11,10 +11,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.AutoGraph
 import androidx.compose.material.icons.filled.Book
-import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Person
@@ -84,7 +84,7 @@ fun BottomNavigationBar(
         val items = listOf(
             Triple("Home", "home", Icons.Default.Home),
             Triple("Aulas", "lessons", Icons.Default.Book),
-            Triple("Visual", "avatar_customization", Icons.Default.Face),
+            Triple("Evolucao", "improvement_stats", Icons.Default.AutoGraph),
             Triple("Perfil", "profile", Icons.Default.Person)
         )
 
@@ -221,7 +221,7 @@ fun ProgressCard(title: String, progress: Float) {
 }
 
 @Composable
-fun GoogleSignInButton(onClick: () -> Unit) {
+fun HelpSignInButton(onClick: () -> Unit) {
     OutlinedButton(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -229,14 +229,13 @@ fun GoogleSignInButton(onClick: () -> Unit) {
         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // Placeholder for Google Icon
             Icon(
-                imageVector = Icons.Default.Face, // Using Face as placeholder
+                imageVector = Icons.Default.Info,
                 contentDescription = null,
                 modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Entrar com Google")
+            Text("Preciso de ajuda para entrar")
         }
     }
 }

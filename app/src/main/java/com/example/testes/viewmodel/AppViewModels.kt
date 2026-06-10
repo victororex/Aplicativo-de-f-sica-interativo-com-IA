@@ -123,10 +123,27 @@ class LessonsViewModel(
 class ChatViewModel(
     private val chatApiClient: ChatApiClient = ChatApiClient()
 ) : ViewModel() {
+    private val greeting = ChatMessage(
+        "greeting",
+        "Oi! Eu sou o titio Renato. Me mande uma formula, unidade ou duvida de Analise Dimensional que eu explico com calma.",
+        false
+    )
     private val _messages = MutableStateFlow(
-        listOf(ChatMessage("1", "Ola! Sou seu tutor de Fisica. Em que posso ajudar hoje?", false))
+        listOf(greeting)
     )
     val messages: StateFlow<List<ChatMessage>> = _messages
+
+    init {
+        loadHistory()
+    }
+
+    private fun loadHistory() {
+        viewModelScope.launch {
+            chatApiClient.getHistory().onSuccess { history ->
+                _messages.value = if (history.isEmpty()) listOf(greeting) else history
+            }
+        }
+    }
 
     fun sendMessage(text: String) {
         if (text.isBlank()) return
@@ -138,7 +155,7 @@ class ChatViewModel(
             val response = chatApiClient.sendMessage(
                 QuestionRequest(
                     message = text,
-                    subject = "Fisica",
+                    subject = "Analise Dimensional",
                     level = "universitario"
                 )
             )

@@ -35,20 +35,20 @@ fun OnboardingScreen(onFinished: () -> Unit, onBackClick: () -> Unit) {
 
     val pages = listOf(
         OnboardingPage(
-            "Aprenda Fisica com um tutor",
-            "Tenha um tutor particular para transformar duvidas em explicacoes claras.",
+            "Domine Analise Dimensional",
+            "Aprenda a conferir formulas usando grandezas, unidades e dimensoes.",
             Icons.Default.School,
-            Color(0xFF00A99D)
+            Color(0xFF2454D6)
         ),
         OnboardingPage(
-            "Converse por voz",
-            "Pergunte falando, leia a resposta ou deixe o tutor explicar em voz alta.",
+            "Converse com o titio Renato",
+            "Pergunte falando ou escrevendo e escolha se quer escutar a resposta.",
             Icons.AutoMirrored.Filled.Chat,
             Color(0xFFFF6B5F)
         ),
         OnboardingPage(
-            "Evolua com trilhas",
-            "Acompanhe progresso por materia e estude com uma campanha guiada.",
+            "Evolua com desafios",
+            "Treine em uma campanha tipo jogo e acompanhe sua evolucao.",
             Icons.Default.AutoGraph,
             Color(0xFFFFC857)
         )
@@ -59,8 +59,10 @@ fun OnboardingScreen(onFinished: () -> Unit, onBackClick: () -> Unit) {
         topBar = {
             AppTopBar(
                 title = "",
-                onBackClick = {
-                    if (currentPage > 0) currentPage-- else onBackClick()
+                onBackClick = if (currentPage > 0) {
+                    { currentPage-- }
+                } else {
+                    null
                 }
             )
         }

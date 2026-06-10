@@ -177,6 +177,7 @@ private fun VisualDemoCard(lesson: Lesson) {
             )
             Spacer(modifier = Modifier.height(8.dp))
             when (lesson.subjectId) {
+                "analise-dimensional" -> DimensionalLessonVisual(lesson.id)
                 "mecanica" -> MechanicsVisual(lesson.id)
                 "termologia" -> ThermalVisual()
                 "ondulatoria" -> WaveVisual()
@@ -187,6 +188,49 @@ private fun VisualDemoCard(lesson: Lesson) {
             }
         }
     }
+}
+
+@Composable
+private fun DimensionalLessonVisual(lessonId: String) {
+    Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
+        val primary = Color(0xFF2454D6)
+        val amber = Color(0xFFFFC857)
+        val coral = Color(0xFFFF6B5F)
+        drawRoundRect(
+            color = Color(0xFFDDEAFF),
+            topLeft = Offset(24f, 20f),
+            size = androidx.compose.ui.geometry.Size(size.width - 48f, 110f)
+        )
+        when (lessonId) {
+            "formulas", "exemplos", "treino" -> {
+                drawLine(primary, Offset(54f, 62f), Offset(size.width * 0.34f, 62f), strokeWidth = 8f)
+                drawLine(amber, Offset(size.width * 0.43f, 44f), Offset(size.width * 0.43f, 80f), strokeWidth = 6f)
+                drawLine(amber, Offset(size.width * 0.39f, 62f), Offset(size.width * 0.47f, 62f), strokeWidth = 6f)
+                drawLine(primary, Offset(size.width * 0.56f, 50f), Offset(size.width - 54f, 50f), strokeWidth = 8f)
+                drawLine(primary.copy(alpha = 0.55f), Offset(size.width * 0.56f, 82f), Offset(size.width - 86f, 82f), strokeWidth = 8f)
+                drawCircle(coral, radius = 13f, center = Offset(size.width - 58f, 82f))
+            }
+            "metodo" -> {
+                repeat(4) { index ->
+                    val x = 60f + index * ((size.width - 120f) / 3f)
+                    drawCircle(if (index == 0) amber else primary, radius = 18f, center = Offset(x, 74f))
+                    if (index < 3) {
+                        drawLine(primary.copy(alpha = 0.55f), Offset(x + 22f, 74f), Offset(x + ((size.width - 120f) / 3f) - 22f, 74f), strokeWidth = 5f)
+                    }
+                }
+            }
+            else -> {
+                drawCircle(amber, radius = 18f, center = Offset(78f, 62f))
+                drawCircle(coral, radius = 18f, center = Offset(78f, 98f))
+                drawLine(primary, Offset(116f, 62f), Offset(size.width - 62f, 62f), strokeWidth = 7f)
+                drawLine(primary.copy(alpha = 0.55f), Offset(116f, 98f), Offset(size.width - 94f, 98f), strokeWidth = 7f)
+            }
+        }
+    }
+    Text(
+        "Troque cada grandeza por [M], [L] e [T], simplifique e compare os dois lados.",
+        style = MaterialTheme.typography.labelMedium
+    )
 }
 
 @Composable

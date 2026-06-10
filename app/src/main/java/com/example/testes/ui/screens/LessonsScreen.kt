@@ -30,7 +30,7 @@ fun LessonsScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(title = "Materias", onBackClick = onBackClick) }
+        topBar = { AppTopBar(title = "Aulas", onBackClick = onBackClick) }
     ) { padding ->
         AppScreenBackground(modifier = Modifier.padding(padding)) {
             when {
@@ -52,8 +52,8 @@ fun LessonsScreen(
                     ) {
                         item {
                             AppHeroPanel(
-                                title = "Biblioteca",
-                                subtitle = "Aulas organizadas por materia, com seu progresso sempre atualizado."
+                                title = "Analise Dimensional",
+                                subtitle = "Conteudo guiado, exemplos resolvidos e treino para conferir formulas."
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                         }

@@ -262,6 +262,7 @@ private fun SettingsSwitchItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 78.dp)
             .padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically

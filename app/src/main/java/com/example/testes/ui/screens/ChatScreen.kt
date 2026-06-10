@@ -3,7 +3,6 @@ package com.example.testes.ui.screens
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.media.MediaPlayer
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -49,19 +48,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import com.example.testes.data.api.ChatApiClient
 import com.example.testes.ui.components.AppHeroPanel
 import com.example.testes.ui.components.AppScreenBackground
 import com.example.testes.ui.components.AppTopBar
 import com.example.testes.ui.components.ChatMessageBubble
 import com.example.testes.ui.components.VoiceButton
 import com.example.testes.viewmodel.ChatViewModel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
-import java.io.File
 import java.util.Locale
-import kotlin.coroutines.resume
 
 @Composable
 fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
@@ -69,14 +63,12 @@ fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
     val messages by viewModel.messages.collectAsState()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    val chatApiClient = remember { ChatApiClient() }
     var textState by remember { mutableStateOf("") }
     var isListening by remember { mutableStateOf(false) }
     var voiceStatus by remember { mutableStateOf<String?>(null) }
     var lastSpokenMessageId by remember { mutableStateOf("1") }
     var ttsReady by remember { mutableStateOf(false) }
-    var voiceResponsesEnabled by rememberSaveable { mutableStateOf(true) }
-    var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+    var voiceResponsesEnabled by rememberSaveable { mutableStateOf(false) }
 
     val textToSpeech = remember {
         TextToSpeech(context) { status ->
@@ -92,7 +84,6 @@ fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
             override fun onError(utteranceId: String?) = Unit
         })
         onDispose {
-            mediaPlayer?.release()
             textToSpeech.stop()
             textToSpeech.shutdown()
         }
@@ -104,53 +95,13 @@ fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
             textToSpeech.voices
                 ?.bestPortugueseVoice()
                 ?.let { textToSpeech.voice = it }
-            textToSpeech.setSpeechRate(0.93f)
-            textToSpeech.setPitch(1.04f)
+            textToSpeech.setSpeechRate(0.88f)
+            textToSpeech.setPitch(1.0f)
         }
     }
 
     fun stopSpeech() {
-        mediaPlayer?.runCatching {
-            if (isPlaying) stop()
-            release()
-        }
-        mediaPlayer = null
         textToSpeech.stop()
-    }
-
-    suspend fun playAudioBytes(bytes: ByteArray) {
-        suspendCancellableCoroutine { continuation ->
-            val audioFile = File.createTempFile("human-voice-", ".mp3", context.cacheDir)
-            audioFile.writeBytes(bytes)
-
-            val player = MediaPlayer()
-            mediaPlayer?.release()
-            mediaPlayer = player
-
-            fun finish() {
-                player.release()
-                if (mediaPlayer == player) mediaPlayer = null
-                audioFile.delete()
-                if (continuation.isActive) continuation.resume(Unit)
-            }
-
-            player.setOnCompletionListener { finish() }
-            player.setOnErrorListener { _, _, _ ->
-                finish()
-                true
-            }
-            continuation.invokeOnCancellation {
-                player.runCatching {
-                    if (isPlaying) stop()
-                    release()
-                }
-                audioFile.delete()
-            }
-
-            player.setDataSource(audioFile.absolutePath)
-            player.prepare()
-            player.start()
-        }
     }
 
     fun speakWithDeviceVoice(text: String, flush: Boolean = true) {
@@ -165,33 +116,17 @@ fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
                 "tutor-${System.currentTimeMillis()}-$index"
             )
             if (index < chunks.lastIndex) {
-                textToSpeech.playSilentUtterance(550, TextToSpeech.QUEUE_ADD, "pause-${System.currentTimeMillis()}-$index")
+                textToSpeech.playSilentUtterance(850, TextToSpeech.QUEUE_ADD, "pause-${System.currentTimeMillis()}-$index")
             }
         }
     }
 
     fun speak(text: String, flush: Boolean = true) {
+        if (!voiceResponsesEnabled) return
         scope.launch {
             stopSpeech()
-            val humanChunks = text.toFluidSpeech().chunkForHumanSpeech()
-            var usedHumanVoice = humanChunks.isNotEmpty()
-
-            for ((index, chunk) in humanChunks.withIndex()) {
-                val audio = chatApiClient.synthesizeSpeech(chunk)
-                if (audio.isFailure) {
-                    usedHumanVoice = false
-                    break
-                }
-                playAudioBytes(audio.getOrThrow())
-                if (index < humanChunks.lastIndex) {
-                    delay(750)
-                }
-            }
-
-            if (!usedHumanVoice) {
-                voiceStatus = "Voz humana indisponivel agora. Usando a voz do aparelho."
-                speakWithDeviceVoice(text, flush)
-            }
+            voiceStatus = "Titio Renato esta falando."
+            speakWithDeviceVoice(text, flush)
         }
     }
 
@@ -202,9 +137,13 @@ fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
     }
 
     val speechRecognizer = remember {
-        if (SpeechRecognizer.isRecognitionAvailable(context)) {
-            SpeechRecognizer.createSpeechRecognizer(context)
-        } else {
+        runCatching {
+            if (SpeechRecognizer.isRecognitionAvailable(context)) {
+                SpeechRecognizer.createSpeechRecognizer(context)
+            } else {
+                null
+            }
+        }.getOrElse {
             null
         }
     }
@@ -285,9 +224,14 @@ fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "pt-BR")
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Fale sua duvida de Fisica")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Fale sua duvida de Analise Dimensional")
         }
-        speechRecognizer.startListening(intent)
+        runCatching {
+            speechRecognizer.startListening(intent)
+        }.onFailure {
+            isListening = false
+            voiceStatus = "Nao consegui abrir o microfone agora."
+        }
     }
 
     val microphonePermissionLauncher = rememberLauncherForActivityResult(
@@ -329,7 +273,7 @@ fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(title = "Tutor de Fisica", onBackClick = onBackClick) }
+        topBar = { AppTopBar(title = "Titio Renato", onBackClick = onBackClick) }
     ) { padding ->
         AppScreenBackground(modifier = Modifier.padding(padding)) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -343,8 +287,8 @@ fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
                     item {
                         androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(top = 12.dp))
                         AppHeroPanel(
-                            title = "Chat de duvidas",
-                            subtitle = "Fale ou digite uma pergunta e receba uma explicacao guiada."
+                            title = "Converse com o titio Renato",
+                            subtitle = "Pergunte sobre formulas, unidades e dimensoes."
                         )
                         androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(top = 12.dp))
                     }
@@ -372,7 +316,7 @@ fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(text = "Resposta por voz", style = MaterialTheme.typography.bodyMedium)
+                    Text(text = "Escutar o titio Renato", style = MaterialTheme.typography.bodyMedium)
                     Switch(
                         checked = voiceResponsesEnabled,
                         onCheckedChange = { enabled ->
@@ -400,7 +344,7 @@ fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
                         value = textState,
                         onValueChange = { textState = it },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text(if (isListening) "Ouvindo..." else "Pergunte algo...") },
+                        placeholder = { Text(if (isListening) "Ouvindo..." else "Pergunte sobre uma formula...") },
                         shape = MaterialTheme.shapes.medium
                     )
 
@@ -449,6 +393,12 @@ private fun String.toFluidSpeech(): String {
         .replace(Regex("\\b([0-9]+(?:[,.][0-9]+)?)\\s*W\\b"), "$1 watts")
         .replace(Regex("\\bkm/h\\b"), "quilometros por hora")
         .replace(Regex("\\bm/s\\b"), "metros por segundo")
+        .replace("v^2", "v ao quadrado")
+        .replace("[M]", " dimensao massa ")
+        .replace("[L]", " dimensao comprimento ")
+        .replace("[T]", " dimensao tempo ")
+        .replace("^-1", " elevado a menos um ")
+        .replace("^-2", " elevado a menos dois ")
         .replace("=", " igual a ")
         .replace("/", " dividido por ")
         .replace("·", " vezes ")

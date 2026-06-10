@@ -5,18 +5,21 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.testes.data.api.AuthApiClient
 import com.example.testes.data.api.SessionManager
 import com.example.testes.ui.components.AppHeroPanel
 import com.example.testes.ui.components.AppScreenBackground
-import com.example.testes.ui.components.GoogleSignInButton
+import com.example.testes.ui.components.HelpSignInButton
 import com.example.testes.ui.components.HoverableText
 import kotlinx.coroutines.launch
 
@@ -24,10 +27,13 @@ import kotlinx.coroutines.launch
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
     onRegisterClick: () -> Unit,
+    onForgotPassword: () -> Unit,
+    onSupportClick: () -> Unit,
     authApiClient: AuthApiClient = AuthApiClient()
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var showPassword by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -45,8 +51,8 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(28.dp))
 
             AppHeroPanel(
-                title = "Fisica Interativa",
-                subtitle = "Seu tutor de bolso para estudar, resolver duvidas e acompanhar seu caminho."
+                title = "Titio Renato Fisica",
+                subtitle = "Uma demo de Analise Dimensional para estudar, praticar e conversar."
             )
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -102,7 +108,15 @@ fun LoginScreen(
                         value = password,
                         onValueChange = { password = it },
                         label = { Text("Senha") },
-                        visualTransformation = PasswordVisualTransformation(),
+                        visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { showPassword = !showPassword }) {
+                                Icon(
+                                    imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = if (showPassword) "Ocultar senha" else "Mostrar senha"
+                                )
+                            }
+                        },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = MaterialTheme.shapes.medium
@@ -111,7 +125,7 @@ fun LoginScreen(
                     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
                         HoverableText(
                             text = "Esqueceu a senha?",
-                            onClick = { },
+                            onClick = onForgotPassword,
                             modifier = Modifier.padding(top = 8.dp)
                         )
                     }
@@ -160,13 +174,13 @@ fun LoginScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    GoogleSignInButton(onClick = { })
+                    HelpSignInButton(onClick = onSupportClick)
                 }
             }
 
             Spacer(modifier = Modifier.weight(1f, fill = false))
             Spacer(modifier = Modifier.height(20.dp))
-            HoverableText(text = "Suporte", onClick = { })
+            HoverableText(text = "Suporte", onClick = onSupportClick)
             Spacer(modifier = Modifier.height(12.dp))
         }
     }

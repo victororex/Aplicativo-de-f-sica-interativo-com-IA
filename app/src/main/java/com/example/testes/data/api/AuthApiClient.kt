@@ -1,11 +1,9 @@
 package com.example.testes.data.api
 
+import com.example.testes.data.local.LocalBackend
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
-import java.net.URL
 
 data class AuthUser(
     val id: Int,
@@ -40,60 +38,20 @@ object SessionManager {
     }
 }
 
-class AuthApiClient(
-    private val baseUrl: String = "http://10.0.2.2:8000"
-) {
+class AuthApiClient {
     suspend fun register(name: String, email: String, password: String): Result<AuthResponse> =
-        postAuth(
-            path = "/auth/register",
-            body = JSONObject().apply {
-                put("name", name)
-                put("email", email)
-                put("password", password)
+        withContext(Dispatchers.IO) {
+            runCatching {
+                parseAuthResponse(LocalBackend.register(name, email, password))
             }
-        )
+        }
 
     suspend fun login(email: String, password: String): Result<AuthResponse> =
-        postAuth(
-            path = "/auth/login",
-            body = JSONObject().apply {
-                put("email", email)
-                put("password", password)
+        withContext(Dispatchers.IO) {
+            runCatching {
+                parseAuthResponse(LocalBackend.login(email, password))
             }
-        )
-
-    private suspend fun postAuth(path: String, body: JSONObject): Result<AuthResponse> = withContext(Dispatchers.IO) {
-        runCatching {
-            val url = URL("$baseUrl$path")
-            val connection = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = 10_000
-                readTimeout = 20_000
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                setRequestProperty("Accept", "application/json")
-            }
-
-            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
-                writer.write(body.toString())
-            }
-
-            val stream = if (connection.responseCode in 200..299) {
-                connection.inputStream
-            } else {
-                connection.errorStream
-            }
-            val responseBody = stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-            if (connection.responseCode !in 200..299) {
-                val message = runCatching {
-                    JSONObject(responseBody).optString("detail", responseBody)
-                }.getOrDefault(responseBody)
-                error("Erro ${connection.responseCode}: $message")
-            }
-
-            parseAuthResponse(JSONObject(responseBody))
         }
-    }
 
     private fun parseAuthResponse(json: JSONObject): AuthResponse {
         val userJson = json.getJSONObject("user")

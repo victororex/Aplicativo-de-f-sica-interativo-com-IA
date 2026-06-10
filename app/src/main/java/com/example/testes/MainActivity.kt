@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.testes.data.local.LocalBackend
 import com.example.testes.navigation.Screen
 import com.example.testes.navigation.SetupNavGraph
 import com.example.testes.ui.components.BottomNavigationBar
@@ -18,6 +19,7 @@ import com.example.testes.ui.theme.TestesTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        LocalBackend.init(applicationContext)
         enableEdgeToEdge()
         setContent {
             TestesTheme {
@@ -29,7 +31,7 @@ class MainActivity : ComponentActivity() {
                 val showBottomBar = currentRoute in listOf(
                     Screen.Home.route,
                     Screen.Lessons.route,
-                    Screen.AvatarCustomization.route,
+                    Screen.ImprovementStats.route,
                     Screen.Profile.route
                 )
 
