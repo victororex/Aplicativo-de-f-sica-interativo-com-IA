@@ -39,7 +39,7 @@ fun SupportScreen(onBackClick: () -> Unit) {
                 SupportCard(
                     icon = Icons.Default.LockReset,
                     title = "Recuperar senha",
-                    text = "Nesta demo local, crie uma nova conta ou use o acesso de teste: aluno@demo.com com senha 123456."
+                    text = "Crie uma nova conta ou use o acesso de teste: aluno@demo.com com senha 123456."
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 SupportCard(
@@ -50,8 +50,8 @@ fun SupportScreen(onBackClick: () -> Unit) {
                 Spacer(modifier = Modifier.height(12.dp))
                 SupportCard(
                     icon = Icons.Default.Info,
-                    title = "Sobre a demo",
-                    text = "O app roda sem servidor externo. Aulas, campanha, desafios, chat e progresso ficam salvos no aparelho."
+                    title = "Sobre o aplicativo",
+                    text = "Aulas, campanha, desafios, conversa e progresso ficam salvos neste aparelho."
                 )
             }
         }

@@ -159,15 +159,19 @@ fun SetupNavGraph(
         }
         
         composable(Screen.Settings.route) {
-            SettingsScreen(onBackClick = { navController.popBackStack() })
+            SettingsScreen(
+                onBackClick = { navController.popBackStack() },
+                onAccountDeleted = {
+                    SessionManager.clear()
+                    navController.navigate(Screen.Login.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+            )
         }
 
         composable(Screen.Support.route) {
             SupportScreen(onBackClick = { navController.popBackStack() })
-        }
-
-        composable(Screen.AvatarCustomization.route) {
-            AvatarCustomizationScreen(onBackClick = { navController.popBackStack() })
         }
         
         composable(Screen.GeneralProgress.route) {

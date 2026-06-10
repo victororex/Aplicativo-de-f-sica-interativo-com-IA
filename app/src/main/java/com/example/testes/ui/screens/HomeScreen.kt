@@ -93,7 +93,7 @@ fun HomeScreen(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Tudo roda no proprio app: aulas, campanha, progresso e chat.",
+                                text = "Seu estudo fica salvo aqui: aulas, desafios, progresso e conversa.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

@@ -57,7 +57,7 @@ fun AppTopBar(title: String, onBackClick: (() -> Unit)? = null) {
                     IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack, 
-                            contentDescription = "Back",
+                            contentDescription = "Voltar",
                             modifier = Modifier.size(24.dp),
                             tint = MaterialTheme.colorScheme.primary
                         )
@@ -168,7 +168,7 @@ fun VoiceButton(onClick: () -> Unit, isListening: Boolean = false) {
         containerColor = if (isListening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
         contentColor = if (isListening) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimary
     ) {
-        Icon(if (isListening) Icons.Default.MicOff else Icons.Default.Mic, contentDescription = "Voice Input")
+        Icon(if (isListening) Icons.Default.MicOff else Icons.Default.Mic, contentDescription = "Falar")
     }
 }
 
@@ -212,7 +212,7 @@ fun ProgressCard(title: String, progress: Float) {
                 trackColor = MaterialTheme.colorScheme.surfaceVariant
             )
             Text(
-                text = "${(progress * 100).toInt()}% completo",
+                text = "${(progress * 100).toInt()}% concluido",
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.align(Alignment.End)
             )
