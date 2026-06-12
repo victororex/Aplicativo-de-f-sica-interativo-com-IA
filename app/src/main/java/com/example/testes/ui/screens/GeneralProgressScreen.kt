@@ -34,7 +34,7 @@ fun GeneralProgressScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(title = "Meu Progresso", onBackClick = onBackClick) }
+        topBar = { AppTopBar(title = "Progresso Geral", onBackClick = onBackClick) }
     ) { padding ->
         AppScreenBackground(modifier = Modifier.padding(padding)) {
             LazyColumn(
@@ -45,7 +45,7 @@ fun GeneralProgressScreen(
                 item {
                     AppHeroPanel(
                         title = "${(averageProgress * 100).toInt()}% do caminho",
-                        subtitle = "$completedLessons de $totalLessons aulas concluidas. Continue pelo tema que mais precisa de atencao."
+                        subtitle = "$completedLessons de $totalLessons aulas concluidas. Continue pela proxima aula de Analise Dimensional."
                     )
                 }
 
@@ -58,7 +58,7 @@ fun GeneralProgressScreen(
                             modifier = Modifier.weight(1f)
                         )
                         ProgressSummaryCard(
-                            label = "Tema",
+                            label = "Trilha",
                             value = subjects.size.toString(),
                             iconColor = Color(0xFFFFC857),
                             modifier = Modifier.weight(1f)

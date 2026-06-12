@@ -1,6 +1,25 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+}
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        file.inputStream().use { load(it) }
+    }
+}
+
+fun localSetting(name: String, fallback: String): String {
+    return providers.gradleProperty(name).orNull
+        ?: localProperties.getProperty(name)
+        ?: fallback
+}
+
+fun quotedBuildString(value: String): String {
+    return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 }
 
 android {
@@ -10,6 +29,7 @@ android {
             minorApiLevel = 1
         }
     }
+    buildToolsVersion = "36.1.0"
 
     defaultConfig {
         applicationId = "com.example.testes"
@@ -19,6 +39,9 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("boolean", "USE_REMOTE_AI", localSetting("USE_REMOTE_AI", "false").toBoolean().toString())
+        buildConfigField("String", "AI_API_BASE_URL", quotedBuildString(localSetting("AI_API_BASE_URL", "http://10.0.2.2:8000")))
     }
 
     buildTypes {
@@ -36,6 +59,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

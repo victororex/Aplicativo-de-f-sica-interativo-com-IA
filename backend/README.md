@@ -1,16 +1,10 @@
-# Back-end e API
+# Backend opcional de IA
 
-API FastAPI do aplicativo de Fisica com IA. Esta versao ja possui base de MVP:
+Este backend FastAPI e opcional para a demo Android. O app usa dados locais para login, aulas, desafios, campanha e progresso. O backend entra apenas quando voce quiser demonstrar:
 
-- cadastro e login com token Bearer;
-- senha protegida com hash PBKDF2;
-- banco SQLite local para desenvolvimento;
-- sessoes de chat e historico persistidos;
-- estatisticas de uso por usuario;
-- upload autenticado de imagens, PDFs, DOCX e TXT;
-- documentacao automatica em `/docs`;
-- health check em `/health`;
-- configuracao por `.env`.
+- resposta com IA online em `POST /chat/message`;
+- voz online em MP3 em `POST /chat/speech`;
+- chave de IA protegida no `.env`, fora do app Android.
 
 ## Rodar localmente
 
@@ -20,102 +14,53 @@ python -m venv venv
 .\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 Copy-Item .env.example .env
-uvicorn main:app --reload
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Servidor:
-
-```text
-http://127.0.0.1:8000
-```
-
-Documentacao interativa:
+Swagger:
 
 ```text
 http://127.0.0.1:8000/docs
 ```
 
-## Fluxo recomendado para teste
+No emulador Android, o app acessa o computador por:
 
-1. Crie usuario em `POST /auth/register`.
-2. Copie o `access_token` retornado.
-3. Clique em **Authorize** no Swagger e informe `Bearer SEU_TOKEN`.
-4. Envie uma pergunta em `POST /chat/message`.
-5. Veja as conversas em `GET /chat/sessions` ou `GET /history`.
-6. Veja metricas em `GET /stats/improvement`.
+```text
+http://10.0.2.2:8000
+```
 
-## Endpoints principais
+## Configurar IA real
 
-### Autenticacao
-
-- `POST /auth/register`
-- `POST /auth/login`
-- `GET /auth/me`
-
-### Usuario
-
-- `GET /users/me`
-- `PUT /users/me`
-
-### Chat
-
-- `POST /chat/message`
-- `GET /chat/sessions`
-- `GET /chat/sessions/{session_id}`
-- `DELETE /chat/sessions/{session_id}`
-
-### Historico
-
-- `GET /history`
-- `GET /history/{session_id}`
-
-### Arquivos
-
-- `POST /files/upload`
-- `GET /files/{file_id}`
-- `DELETE /files/{file_id}`
-
-### Estatisticas
-
-- `GET /stats/improvement`
-
-## IA
-
-Por padrao, a IA usa `USE_MOCK_AI=true`, entao o chat funciona sem chave externa. Para demonstrar com IA real, configure:
+No `backend/.env`:
 
 ```env
 USE_MOCK_AI=false
 OPENAI_API_KEY=sua_chave
 MODEL_NAME=gpt-4o-mini
-```
-
-## Voz humana
-
-Para a fala soar realmente humana, configure a chave no backend. O app vai pedir `POST /chat/speech`, receber um MP3 e tocar a resposta com pausas entre os trechos. Se a chave nao estiver configurada, ele usa a voz do aparelho como reserva.
-
-```env
-OPENAI_API_KEY=sua_chave
 TTS_MODEL=gpt-4o-mini-tts
 TTS_VOICE=marin
 ```
 
-## Pronto para apresentacao
+No `local.properties` do projeto Android:
 
-Para apresentar comercialmente, mostre estes pontos:
+```properties
+USE_REMOTE_AI=true
+AI_API_BASE_URL=http://10.0.2.2:8000
+```
 
-- o app nunca recebe a chave da IA;
-- usuarios possuem token e dados separados;
-- historico e metricas ficam salvos no backend;
-- uploads passam por validacao de tipo e tamanho;
-- a API tem Swagger, health check e configuracao por ambiente.
+Se `USE_REMOTE_AI=false`, o app usa o tutor local e continua funcionando sem backend.
 
-## Proximos passos para producao real
+## Endpoints usados pelo app
 
-- trocar SQLite por PostgreSQL;
-- configurar HTTPS e dominio;
-- usar segredo JWT forte no servidor;
-- restringir `ALLOWED_ORIGINS`;
-- adicionar rate limit por usuario;
-- adicionar logs estruturados e monitoramento;
-- criar testes automatizados de API;
-- mover arquivos para storage externo em nuvem.
+- `POST /chat/message`
+- `POST /chat/speech`
+
+Os demais endpoints do backend ficam como base tecnica antiga do projeto e nao sao necessarios para a demo local atual.
+
+## Validacao
+
+```powershell
+python -m compileall backend
+```
+
+Nunca coloque `OPENAI_API_KEY` no app Android ou em arquivos versionados.

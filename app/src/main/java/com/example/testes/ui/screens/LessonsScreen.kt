@@ -41,7 +41,7 @@ fun LessonsScreen(
                 }
                 errorMessage != null && subjects.isEmpty() -> {
                     Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                        Text(errorMessage ?: "Nao foi possivel carregar as materias.")
+                        Text(errorMessage ?: "Nao foi possivel carregar as aulas.")
                     }
                 }
                 else -> {

@@ -26,6 +26,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsScreen(
     onBackClick: () -> Unit,
+    onAccountDeleted: () -> Unit,
     contentApiClient: ContentApiClient = ContentApiClient()
 ) {
     var user by remember { mutableStateOf<User?>(null) }
@@ -34,6 +35,7 @@ fun SettingsScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var successMessage by remember { mutableStateOf<String?>(null) }
     var editField by remember { mutableStateOf<EditField?>(null) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     fun save(updated: User) {
@@ -68,6 +70,18 @@ fun SettingsScreen(
             }.onFailure {
                 errorMessage = "Nao consegui salvar agora."
             }
+            isSaving = false
+        }
+    }
+
+    fun deleteAccount() {
+        scope.launch {
+            isSaving = true
+            errorMessage = null
+            successMessage = null
+            contentApiClient.deleteCurrentUser()
+                .onSuccess { onAccountDeleted() }
+                .onFailure { errorMessage = "Nao consegui excluir sua conta agora." }
             isSaving = false
         }
     }
@@ -161,11 +175,12 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(20.dp))
 
                     TextButton(
-                        onClick = { errorMessage = "Essa opcao estara disponivel em breve." },
+                        onClick = { showDeleteDialog = true },
+                        enabled = !isSaving,
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                     ) {
-                        Text("Excluir Conta")
+                        Text("Excluir conta")
                     }
                 }
             }
@@ -180,6 +195,30 @@ fun SettingsScreen(
             onConfirm = {
                 field.onConfirm(it)
                 editField = null
+            }
+        )
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Excluir conta?") },
+            text = { Text("Isso remove seu perfil, progresso, desafios e conversa salvos neste aparelho.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteDialog = false
+                        deleteAccount()
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Excluir")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancelar")
+                }
             }
         )
     }
