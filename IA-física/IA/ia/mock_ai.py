@@ -1,27 +1,21 @@
 def responder_mock(pergunta: str) -> str:
-    return f"""
-IA Física - MODO SIMULADO
+    return """
+Resposta curta:
+A Analise Dimensional ajuda a conferir se uma formula faz sentido comparando as dimensoes fisicas dos dois lados.
 
-Pergunta recebida:
-{pergunta}
+Passo a passo:
+* Identifique as grandezas da pergunta.
+* Troque cada grandeza por [M], [L] e [T].
+* Simplifique as potencias.
+* Compare os dois lados da igualdade.
 
-Resposta simulada:
+Formula ou relacao dimensional:
+v = d / t
+[v] = [L] / [T] = [L][T]^-1
 
-1. Dados do problema:
-Exemplo: força = 40 N, distância = 10 m, tempo = 5 s.
+Exemplo simples:
+Se a pergunta envolve velocidade, pense em distancia dividida por tempo. Distancia tem dimensao [L] e tempo tem dimensao [T].
 
-2. Fórmula usada:
-P = W / t
-
-3. Trabalho:
-W = F · d = 40 · 10 = 400 J
-
-4. Potência:
-P = 400 / 5 = 80 W
-
-5. Resposta final:
-80 W
-
-Observação:
-Essa resposta é simulada para testar o aplicativo sem consumir crédito da API.
+Resumo final:
+Quando as dimensoes nao combinam, a formula precisa ser revista antes dos calculos.
 """

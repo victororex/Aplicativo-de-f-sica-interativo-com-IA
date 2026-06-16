@@ -9,6 +9,8 @@ class DailyQuestionResponse(BaseModel):
     explanation: str
     subject_id: str
     subject_name: str
+    difficulty: str = "Media"
+    topic: str = "Fisica"
 
 
 class QuizSubmission(BaseModel):

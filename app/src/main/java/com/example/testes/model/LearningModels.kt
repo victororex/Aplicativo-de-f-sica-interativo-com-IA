@@ -7,7 +7,9 @@ data class DailyQuestion(
     val correctIndex: Int,
     val explanation: String,
     val subjectId: String,
-    val subjectName: String
+    val subjectName: String,
+    val difficulty: String,
+    val topic: String
 )
 
 data class DailyChallengeStatus(
@@ -38,7 +40,9 @@ data class CampaignExercise(
     val options: List<String>,
     val correctIndex: Int,
     val explanation: String,
-    val visualType: String
+    val visualType: String,
+    val difficulty: String = "Media",
+    val topic: String = "Analise Dimensional"
 )
 
 data class AvatarItem(

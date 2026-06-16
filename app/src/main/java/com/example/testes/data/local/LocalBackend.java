@@ -9,7 +9,9 @@ import org.json.JSONObject;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 
 public final class LocalBackend {
     private static final String PREFS = "fisica_dimensional_demo";
@@ -24,12 +26,13 @@ public final class LocalBackend {
         prefs = context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         try {
             if (!prefs.contains("users")) {
-                seedDemoUser();
+                seedInitialUser();
             } else {
                 repairUserStorage();
             }
+            migrateStorage();
         } catch (JSONException error) {
-            seedDemoUser();
+            seedInitialUser();
         }
     }
 
@@ -78,6 +81,29 @@ public final class LocalBackend {
             throw new IllegalArgumentException("E-mail ou senha incorretos.");
         }
         return authResponse(user);
+    }
+
+    public static void resetPassword(String email, String newPassword) throws JSONException {
+        ensure();
+        String cleanEmail = cleanEmail(email);
+        String cleanPassword = newPassword == null ? "" : newPassword.trim();
+        if (!looksLikeEmail(cleanEmail)) {
+            throw new IllegalArgumentException("Informe um e-mail válido.");
+        }
+        if (cleanPassword.length() < 6) {
+            throw new IllegalArgumentException("Use uma senha com pelo menos 6 caracteres.");
+        }
+
+        JSONArray users = users();
+        for (int i = 0; i < users.length(); i++) {
+            JSONObject user = users.getJSONObject(i);
+            if (cleanEmail.equalsIgnoreCase(user.optString("email"))) {
+                user.put("password", cleanPassword);
+                prefs.edit().putString("users", users.toString()).apply();
+                return;
+            }
+        }
+        throw new IllegalArgumentException("Não encontramos uma conta com este e-mail.");
     }
 
     public static JSONObject currentUser(String token) throws JSONException {
@@ -155,8 +181,8 @@ public final class LocalBackend {
         subjects.put(new JSONObject()
                 .put("id", SUBJECT_ID)
                 .put("name", SUBJECT_NAME)
-                .put("description", "Aprenda a testar formulas usando grandezas, unidades e dimensoes.")
-                .put("exam_focus", "Demo focada somente em Analise Dimensional")
+                .put("description", "Aprenda a verificar formulas usando grandezas, unidades e dimensoes.")
+                .put("exam_focus", "Trilha completa de Analise Dimensional")
                 .put("total_lessons", total)
                 .put("completed_lessons", completed)
                 .put("progress", total == 0 ? 0.0 : (double) completed / total)
@@ -176,11 +202,16 @@ public final class LocalBackend {
     }
 
     public static JSONObject lesson(String token, String lessonId) throws JSONException {
+        int userId = userIdFromToken(token);
         JSONArray source = lessonsData();
         JSONArray completed = completedLessons(token);
         for (int i = 0; i < source.length(); i++) {
             JSONObject lesson = source.getJSONObject(i);
             if (lessonId.equals(lesson.optString("id"))) {
+                recordEvent(userId, "lesson_opened", lesson.optString("id"), JSONObject.NULL, JSONObject.NULL, JSONObject.NULL, 60);
+                JSONObject stats = stats(userId);
+                stats.put("last_lesson_title", lesson.optString("title"));
+                prefs.edit().putString(key(userId, "stats"), stats.toString()).apply();
                 return lessonDetail(lesson, contains(completed, lessonId));
             }
         }
@@ -193,20 +224,31 @@ public final class LocalBackend {
         if (!contains(completed, lessonId)) {
             completed.put(lessonId);
             addStats(userId, 0, 0, 0, 0, 210);
+            recordEvent(userId, "lesson_completed", lessonId, JSONObject.NULL, JSONObject.NULL, JSONObject.NULL, 210);
         }
         prefs.edit().putString(key(userId, "completed_lessons"), completed.toString()).apply();
+        com.example.testes.data.state.AppStateBus.INSTANCE.emit(
+                com.example.testes.data.state.AppEvent.LessonCompleted.INSTANCE
+        );
         return progressSummary(token);
     }
 
     public static JSONObject progressSummary(String token) throws JSONException {
         int userId = userIdFromToken(token);
         JSONArray completed = completedLessons(token);
-        int total = lessonsData().length();
+        int trackTotal = dimensionalTrackTotal();
+        double overall;
+        if (trackTotal > 0) {
+            overall = (double) dimensionalTrackCompleted(token) / trackTotal;
+        } else {
+            int totalLessons = lessonsData().length();
+            overall = totalLessons == 0 ? 0.0 : (double) completed.length() / totalLessons;
+        }
         return new JSONObject()
                 .put("user_id", userId)
                 .put("completed_lessons", completed)
                 .put("current_module", SUBJECT_NAME)
-                .put("overall_completion", total == 0 ? 0.0 : (double) completed.length() / total);
+                .put("overall_completion", Math.min(1.0, overall));
     }
 
     public static JSONArray dailyChallenge() throws JSONException {
@@ -279,6 +321,11 @@ public final class LocalBackend {
                 .put("completed_at", attempt.optString("date"));
     }
 
+    public static void recordDailyChallengeStarted(String token) throws JSONException {
+        int userId = userIdFromToken(token);
+        recordEvent(userId, "daily_challenge_started", JSONObject.NULL, "daily", JSONObject.NULL, JSONObject.NULL, 0);
+    }
+
     public static JSONObject submitDaily(String token, int score, int total) throws JSONException {
         int userId = userIdFromToken(token);
         JSONObject existing = jsonObject(key(userId, "daily_attempt"), null);
@@ -292,6 +339,10 @@ public final class LocalBackend {
                 .put("total", total);
         prefs.edit().putString(key(userId, "daily_attempt"), attempt.toString()).apply();
         addStats(userId, total, score, 0, 0, 180);
+        recordEvent(userId, "daily_challenge_completed", JSONObject.NULL, "daily", score >= total, "misto", 180);
+        com.example.testes.data.state.AppStateBus.INSTANCE.emit(
+                com.example.testes.data.state.AppEvent.DailyChallengeSubmitted.INSTANCE
+        );
         return quizResult(score, total);
     }
 
@@ -329,7 +380,97 @@ public final class LocalBackend {
         JSONObject saved = new JSONObject().put("score", score).put("total", total);
         prefs.edit().putString(key(userId, "campaign_" + nodeId), saved.toString()).apply();
         addStats(userId, total, score, !wasComplete && isComplete ? 1 : 0, 0, 240);
+        recordEvent(userId, "campaign_stage_completed", JSONObject.NULL, nodeId, isComplete, "campanha", 240);
+        com.example.testes.data.state.AppStateBus.INSTANCE.emit(
+                com.example.testes.data.state.AppEvent.CampaignStageSubmitted.INSTANCE
+        );
         return quizResult(score, total);
+    }
+
+    public static void recordDailyAnswer(
+            String token,
+            String questionId,
+            String topic,
+            String selectedAnswer,
+            String correctAnswer,
+            boolean isCorrect,
+            String difficulty,
+            int responseTimeSeconds
+    ) throws JSONException {
+        int userId = userIdFromToken(token);
+        recordEventWithTopic(
+                userId,
+                "exercise_answered",
+                topic == null || topic.trim().isEmpty() ? SUBJECT_NAME : topic.trim(),
+                JSONObject.NULL,
+                questionId,
+                isCorrect,
+                difficulty,
+                Math.max(0, responseTimeSeconds),
+                selectedAnswer,
+                correctAnswer
+        );
+    }
+
+    public static void recordCampaignAnswer(
+            String token,
+            String questionId,
+            String topic,
+            boolean isCorrect,
+            String difficulty,
+            int responseTimeSeconds
+    ) throws JSONException {
+        int userId = userIdFromToken(token);
+        recordEventWithTopic(
+                userId,
+                "exercise_answered",
+                topic == null || topic.trim().isEmpty() ? SUBJECT_NAME : topic.trim(),
+                JSONObject.NULL,
+                questionId,
+                isCorrect,
+                difficulty,
+                Math.max(0, responseTimeSeconds)
+        );
+    }
+
+    public static JSONObject analyticsSnapshot(String token) throws JSONException {
+        int userId = userIdFromToken(token);
+        return new JSONObject()
+                .put("schema_version", 2)
+                .put("events", jsonArray(key(userId, "learning_events")))
+                .put("stats", stats(userId))
+                .put("completed_lessons", completedLessons(token).length())
+                .put("total_lessons", lessonsData().length())
+                .put("completed_phases", completedCampaignCount(userId))
+                .put("total_phases", campaignData().length());
+    }
+
+    public static void startStudySession(String token) throws JSONException {
+        int userId = userIdFromToken(token);
+        String sessionKey = key(userId, "active_study_session");
+        if (jsonObject(sessionKey, null) != null) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        prefs.edit().putString(
+                sessionKey,
+                new JSONObject().put("id", "session-" + now).put("started_at", now).toString()
+        ).apply();
+        recordEvent(userId, "study_session_started", JSONObject.NULL, JSONObject.NULL, JSONObject.NULL, JSONObject.NULL, 0);
+    }
+
+    public static void completeStudySession(String token) throws JSONException {
+        int userId = userIdFromToken(token);
+        String sessionKey = key(userId, "active_study_session");
+        JSONObject active = jsonObject(sessionKey, null);
+        if (active == null) {
+            return;
+        }
+        long elapsedSeconds = (System.currentTimeMillis() - active.optLong("started_at")) / 1000L;
+        int duration = (int) Math.min(14_400L, Math.max(5L, elapsedSeconds));
+        addStats(userId, 0, 0, 0, 0, duration);
+        recordEvent(userId, "study_session_completed", JSONObject.NULL, JSONObject.NULL, JSONObject.NULL, JSONObject.NULL, duration);
+        prefs.edit().remove(sessionKey).apply();
     }
 
     public static JSONObject improvementStats(String token) throws JSONException {
@@ -337,15 +478,41 @@ public final class LocalBackend {
         JSONObject stats = stats(userId);
         int answered = stats.optInt("answered");
         int correct = stats.optInt("correct");
+        int incorrect = Math.max(0, answered - correct);
         int accuracy = answered == 0 ? 0 : Math.round(correct * 100f / answered);
         int completedPhases = completedCampaignCount(userId);
+        int completedLessons = completedLessons(token).length();
+        int totalLessons = lessonsData().length();
+        int trackTotal = dimensionalTrackTotal();
+        int trackDone = trackTotal > 0 ? dimensionalTrackCompleted(token) : 0;
+        int progress = trackTotal > 0
+                ? Math.round(trackDone * 100f / trackTotal)
+                : (totalLessons == 0 ? 0 : Math.round(completedLessons * 100f / totalLessons));
+        JSONArray events = jsonArray(key(userId, "learning_events"));
+        String weakTopic = topicWithMostErrors(events);
+        String recommendedDifficulty = recommendedDifficulty(answered, accuracy);
+        int averageResponseTime = averageResponseTime(events);
         return new JSONObject()
                 .put("accuracy_rate", accuracy)
-                .put("study_quality", answered == 0 ? "Comece pelo primeiro desafio" : accuracy >= 80 ? "Muito boa" : accuracy >= 60 ? "Boa evolucao" : "Em treino")
+                .put("study_quality", answered == 0 ? "Comece pela primeira aula" : accuracy >= 80 ? "Muito boa" : accuracy >= 60 ? "Boa evolucao" : "Em desenvolvimento")
                 .put("studied_seconds", stats.optInt("study_seconds"))
+                .put("completed_lessons", completedLessons)
+                .put("total_lessons", totalLessons)
+                .put("answered_exercises", answered)
+                .put("correct_answers", correct)
+                .put("incorrect_answers", incorrect)
+                .put("dimensional_progress", progress)
                 .put("questions_asked", stats.optInt("chat_questions"))
                 .put("completed_phases", completedPhases)
-                .put("total_phases", campaignData().length());
+                .put("total_phases", campaignData().length())
+                .put("last_lesson", stats.optString("last_lesson_title", "Nenhuma aula aberta ainda"))
+                .put("weak_topic", weakTopic)
+                .put("recommended_difficulty", recommendedDifficulty)
+                .put("next_action", nextAction(answered, accuracy, progress, weakTopic, stats.optInt("chat_questions")))
+                .put("average_response_time_seconds", averageResponseTime)
+                .put("easy_accuracy_rate", difficultyAccuracy(events, "Facil"))
+                .put("medium_accuracy_rate", difficultyAccuracy(events, "Medio"))
+                .put("recommendation", recommendation(answered, accuracy, progress, completedPhases, weakTopic));
     }
 
     public static JSONObject chat(String token, String message) throws JSONException {
@@ -354,6 +521,7 @@ public final class LocalBackend {
         String answer = Tutor.answer(cleanMessage);
         saveChatExchange(token, cleanMessage, answer);
         addStats(userId, 0, 0, 0, 1, 45);
+        recordEvent(userId, "chat_question_sent", JSONObject.NULL, JSONObject.NULL, JSONObject.NULL, JSONObject.NULL, 45);
 
         return new JSONObject()
                 .put("session_id", userId)
@@ -391,11 +559,178 @@ public final class LocalBackend {
         return jsonArray(key(userId, "chat_history"));
     }
 
+    public static void incrementChatStats(String token) {
+        try {
+            addStats(userIdFromToken(token), 0, 0, 0, 1, 0);
+            com.example.testes.data.state.AppStateBus.INSTANCE.emit(
+                    com.example.testes.data.state.AppEvent.ChatMessageSent.INSTANCE
+            );
+        } catch (JSONException ignored) {}
+    }
+
+    public static void recordOcrUsed(String token, String topic, int responseTimeSeconds) {
+        try {
+            int userId = userIdFromToken(token);
+            recordEventWithTopic(
+                    userId,
+                    "ocr_used",
+                    topic == null || topic.trim().isEmpty() ? SUBJECT_NAME : topic.trim(),
+                    JSONObject.NULL,
+                    JSONObject.NULL,
+                    JSONObject.NULL,
+                    JSONObject.NULL,
+                    Math.max(0, responseTimeSeconds)
+            );
+            com.example.testes.data.state.AppStateBus.INSTANCE.emit(
+                    com.example.testes.data.state.AppEvent.OcrAnalyzed.INSTANCE
+            );
+        } catch (JSONException ignored) {}
+    }
+
+    public static int computeXp(String token) {
+        try {
+            int userId = userIdFromToken(token);
+            JSONObject s = stats(userId);
+            int answered = s.optInt("answered");
+            int correct = s.optInt("correct");
+            int campaigns = s.optInt("campaign_completed");
+            int chats = s.optInt("chat_questions");
+            int studySeconds = s.optInt("study_seconds");
+            return answered * 10 + correct * 5 + campaigns * 50 + chats * 2 + studySeconds / 60;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    public static int computeLevel(String token) {
+        return (int) Math.floor(Math.sqrt(computeXp(token) / 100.0));
+    }
+
+    public static void recordLessonOpened(String token, String lessonId) {
+        try {
+            int userId = userIdFromToken(token);
+            recordEvent(userId, "lesson_opened", lessonId, JSONObject.NULL, JSONObject.NULL, JSONObject.NULL, 0);
+            com.example.testes.data.state.AppStateBus.INSTANCE.emit(
+                    com.example.testes.data.state.AppEvent.LessonOpened.INSTANCE
+            );
+        } catch (JSONException ignored) {}
+    }
+
+    public static void recordChatEvent(String token, String eventType, String topic, int responseTimeSeconds) throws JSONException {
+        int userId = userIdFromToken(token);
+        recordEventWithTopic(
+                userId,
+                eventType,
+                topic == null || topic.trim().isEmpty() ? SUBJECT_NAME : topic.trim(),
+                JSONObject.NULL,
+                JSONObject.NULL,
+                JSONObject.NULL,
+                JSONObject.NULL,
+                Math.max(0, responseTimeSeconds)
+        );
+    }
+
+    public static void recordAuthEvent(String token, String eventType) throws JSONException {
+        int userId = userIdFromToken(token);
+        recordEvent(userId, eventType, JSONObject.NULL, JSONObject.NULL, JSONObject.NULL, JSONObject.NULL, 0);
+    }
+
     public static JSONObject supportInfo() throws JSONException {
         return new JSONObject()
                 .put("title", "Suporte")
                 .put("message", "Para recuperar a senha ou relatar um problema, fale com o responsavel pela apresentacao do projeto. Informe seu e-mail e descreva o que aconteceu.")
                 .put("email", "suporte@fisicainterativa.local");
+    }
+
+    public static JSONArray completedTrackMissions(String token) throws JSONException {
+        int userId = userIdFromToken(token);
+        return jsonArray(key(userId, "track_completed_dimensional"));
+    }
+
+    public static void markTrackMissionCompleted(String token, String missionId) throws JSONException {
+        if (missionId == null || missionId.trim().isEmpty()) return;
+        int userId = userIdFromToken(token);
+        JSONArray completed = jsonArray(key(userId, "track_completed_dimensional"));
+        if (!contains(completed, missionId)) {
+            completed.put(missionId);
+            prefs.edit().putString(key(userId, "track_completed_dimensional"), completed.toString()).apply();
+            addStats(userId, 0, 0, 1, 0, 240);
+            recordEvent(userId, "track_mission_completed", JSONObject.NULL, missionId, true, "trilha", 240);
+            com.example.testes.data.state.AppStateBus.INSTANCE.emit(
+                    com.example.testes.data.state.AppEvent.TrackMissionCompleted.INSTANCE
+            );
+        }
+    }
+
+    public static void setDimensionalTrackTotal(int total) {
+        if (prefs == null) return;
+        prefs.edit().putInt("dimensional_track_total", Math.max(0, total)).apply();
+    }
+
+    public static int dimensionalTrackTotal() {
+        if (prefs == null) return 0;
+        return prefs.getInt("dimensional_track_total", 0);
+    }
+
+    public static int dimensionalTrackCompleted(String token) throws JSONException {
+        return completedTrackMissions(token).length();
+    }
+
+    public static double dimensionalTrackRatio(String token) throws JSONException {
+        int total = dimensionalTrackTotal();
+        if (total <= 0) return 0.0;
+        int done = dimensionalTrackCompleted(token);
+        return Math.min(1.0, Math.max(0.0, (double) done / total));
+    }
+
+    public static JSONObject dailyChallengeInstance(String token, String instanceId) throws JSONException {
+        int userId = userIdFromToken(token);
+        JSONObject saved = jsonObject(key(userId, "daily_instance_" + instanceId), null);
+        if (saved == null) {
+            return new JSONObject().put("completed", false);
+        }
+        return new JSONObject()
+                .put("completed", saved.optBoolean("completed", false))
+                .put("score", saved.optInt("score", 0))
+                .put("total", saved.optInt("total", 0))
+                .put("completed_at", saved.optString("completed_at", ""))
+                .put("picks", saved.optJSONObject("picks") == null ? new JSONObject() : saved.optJSONObject("picks"));
+    }
+
+    public static void recordDailyChallengeInstance(String token, String instanceId, int score, int total, JSONObject picks) throws JSONException {
+        int userId = userIdFromToken(token);
+        JSONObject saved = new JSONObject()
+                .put("completed", true)
+                .put("score", score)
+                .put("total", total)
+                .put("completed_at", today())
+                .put("picks", picks == null ? new JSONObject() : picks);
+        prefs.edit().putString(key(userId, "daily_instance_" + instanceId), saved.toString()).apply();
+        addStats(userId, total, score, 0, 0, 180);
+        recordEvent(userId, "daily_instance_completed", JSONObject.NULL, instanceId, score >= total, "misto", 180);
+        com.example.testes.data.state.AppStateBus.INSTANCE.emit(
+                com.example.testes.data.state.AppEvent.DailyChallengeInstanceSubmitted.INSTANCE
+        );
+    }
+
+    /** Mantido para back-compat; delega para a sobrecarga com picks. */
+    public static void recordDailyChallengeInstance(String token, String instanceId, int score, int total) throws JSONException {
+        recordDailyChallengeInstance(token, instanceId, score, total, null);
+    }
+
+    public static void recordDailyQuestionUsage(String token, String questionId, long epochDay) throws JSONException {
+        if (questionId == null || questionId.trim().isEmpty()) return;
+        int userId = userIdFromToken(token);
+        JSONObject usage = jsonObject(key(userId, "daily_question_usage"), null);
+        if (usage == null) usage = new JSONObject();
+        usage.put(questionId, epochDay);
+        prefs.edit().putString(key(userId, "daily_question_usage"), usage.toString()).apply();
+    }
+
+    public static JSONObject dailyQuestionUsage(String token) throws JSONException {
+        int userId = userIdFromToken(token);
+        JSONObject usage = jsonObject(key(userId, "daily_question_usage"), null);
+        return usage == null ? new JSONObject() : usage;
     }
 
     public static JSONArray avatarItems() throws JSONException {
@@ -425,7 +760,7 @@ public final class LocalBackend {
                 "fundamentais",
                 "Dimensoes fundamentais",
                 "Use [M], [L] e [T] para representar massa, comprimento e tempo.",
-                "Nesta demo vamos usar tres dimensoes fundamentais.\n\n[M] representa massa.\n[L] representa comprimento.\n[T] representa tempo.\n\nAs outras grandezas nascem da combinacao dessas tres.\n\nArea:\ncomprimento vezes comprimento\n[A] = [L].[L] = [L]^2\n\nVolume:\ncomprimento vezes comprimento vezes comprimento\n[V] = [L]^3\n\nVelocidade:\ncomprimento dividido por tempo\n[v] = [L][T]^-1\n\nNumeros puros, como 2, 1/2 ou pi, nao mudam a dimensao. Eles mudam o valor da conta, mas nao a natureza fisica.",
+                "Nesta trilha vamos usar tres dimensoes fundamentais.\n\n[M] representa massa.\n[L] representa comprimento.\n[T] representa tempo.\n\nAs outras grandezas nascem da combinacao dessas tres.\n\nArea:\ncomprimento vezes comprimento\n[A] = [L].[L] = [L]^2\n\nVolume:\ncomprimento vezes comprimento vezes comprimento\n[V] = [L]^3\n\nVelocidade:\ncomprimento dividido por tempo\n[v] = [L][T]^-1\n\nNumeros puros, como 2, 1/2 ou pi, nao mudam a dimensao. Eles mudam o valor da conta, mas nao a natureza fisica.",
                 3
         ));
         list.put(lessonData(
@@ -538,7 +873,7 @@ public final class LocalBackend {
                         {"camp-final-1", "A dimensao de E = m.v^2 e:", "[M][L]^2[T]^-2|[M][L][T]^-2|[L]^2[T]^-1|[M]^2[L]", "0", "Eleve a velocidade ao quadrado e multiplique por massa."},
                         {"camp-final-2", "Se P = F.v, qual a dimensao de potencia?", "[M][L]^2[T]^-3|[M][L][T]^-1|[L][T]^-2|[M][T]^2", "0", "Forca e [M][L][T]^-2; velocidade e [L][T]^-1."},
                         {"camp-final-3", "Um coeficiente sem unidade e chamado de:", "Adimensional|Fundamental|Temporal|Vetorial", "0", "Grandezas sem unidade tem dimensao 1."},
-                        {"camp-final-4", "Se uma formula passa no teste dimensional, isso prova que ela esta certa?", "Nao, so mostra coerencia|Sim, prova tudo|Sim, se tiver metros|Nao, porque dimensao nao existe", "0", "O teste dimensional encontra erros, mas nao garante constantes, sinais ou o modelo completo."}
+                        {"camp-final-4", "Se uma formula tem coerencia dimensional, isso prova que ela esta certa?", "Nao, so mostra coerencia|Sim, prova tudo|Sim, se tiver metros|Nao, porque dimensao nao existe", "0", "A analise dimensional encontra incoerencias, mas nao garante constantes, sinais ou o modelo completo."}
                 }
         ));
         return list;
@@ -584,7 +919,19 @@ public final class LocalBackend {
                 .put("explanation", explanation)
                 .put("subject_id", SUBJECT_ID)
                 .put("subject_name", SUBJECT_NAME)
+                .put("topic", topicForQuestion(id, question))
                 .put("difficulty", difficulty);
+    }
+
+    private static String topicForQuestion(String id, String question) {
+        String text = (id + " " + question).toLowerCase(Locale.ROOT);
+        if (text.contains("unidade") || text.contains("metro") || text.contains("segundo")) {
+            return "Diferença entre unidade e dimensão";
+        }
+        if (text.contains("velocidade") || text.contains("forca") || text.contains("energia") || text.contains("potencia")) {
+            return "Fórmulas dimensionais";
+        }
+        return SUBJECT_NAME;
     }
 
     private static JSONObject authResponse(JSONObject user) throws JSONException {
@@ -627,6 +974,141 @@ public final class LocalBackend {
         stats.put("chat_questions", stats.optInt("chat_questions") + chatQuestions);
         stats.put("study_seconds", stats.optInt("study_seconds") + studySeconds);
         prefs.edit().putString(key(userId, "stats"), stats.toString()).apply();
+    }
+
+    private static void recordEvent(int userId, String eventType, Object lessonId, Object questionId, Object isCorrect, Object difficulty, int timeSpentSeconds) throws JSONException {
+        recordEventWithTopic(userId, eventType, SUBJECT_NAME, lessonId, questionId, isCorrect, difficulty, timeSpentSeconds, JSONObject.NULL, JSONObject.NULL);
+    }
+
+    private static void recordEventWithTopic(int userId, String eventType, String topic, Object lessonId, Object questionId, Object isCorrect, Object difficulty, int timeSpentSeconds) throws JSONException {
+        recordEventWithTopic(userId, eventType, topic, lessonId, questionId, isCorrect, difficulty, timeSpentSeconds, JSONObject.NULL, JSONObject.NULL);
+    }
+
+    private static void recordEventWithTopic(
+            int userId,
+            String eventType,
+            String topic,
+            Object lessonId,
+            Object questionId,
+            Object isCorrect,
+            Object difficulty,
+            int timeSpentSeconds,
+            Object selectedAnswer,
+            Object correctAnswer
+    ) throws JSONException {
+        JSONArray events = jsonArray(key(userId, "learning_events"));
+        events.put(new JSONObject()
+                .put("id", "event-" + System.currentTimeMillis() + "-" + events.length())
+                .put("user_id", userId)
+                .put("event_type", eventType)
+                .put("topic", topic)
+                .put("lesson_id", lessonId)
+                .put("question_id", questionId)
+                .put("selected_answer", selectedAnswer)
+                .put("correct_answer", correctAnswer)
+                .put("is_correct", isCorrect)
+                .put("difficulty", difficulty)
+                .put("response_time_seconds", timeSpentSeconds)
+                .put("time_spent_seconds", timeSpentSeconds)
+                .put("timestamp", System.currentTimeMillis()));
+        events = trimHistory(events, 240);
+        prefs.edit().putString(key(userId, "learning_events"), events.toString()).apply();
+    }
+
+    private static String recommendation(int answered, int accuracy, int progress, int completedPhases, String weakTopic) {
+        if (answered == 0 && progress == 0) {
+            return "Comece uma aula ou responda um desafio para acompanhar sua evolucao.";
+        }
+        if (accuracy < 50 && answered > 0) {
+            return "Com base nas suas respostas, recomendamos revisar conceitos basicos, unidades e dimensoes antes do proximo desafio.";
+        }
+        if (accuracy < 80 && answered > 0) {
+            return "Com base nas suas respostas, recomendamos praticar exercicios medios e revisar " + weakTopic + " antes do proximo desafio.";
+        }
+        if (progress < 50) {
+            return "Voce esta evoluindo bem. Continue a trilha de Analise Dimensional e faca desafios de dificuldade media.";
+        }
+        if (completedPhases >= 3 && accuracy >= 80) {
+            return "Seu desempenho esta forte. Recomendamos desafios mais dificeis sobre energia, potencia e coerencia dimensional.";
+        }
+        return "Bom desempenho em formulas dimensionais. Mantenha os desafios diarios para consolidar o conteudo.";
+    }
+
+    private static String recommendedDifficulty(int answered, int accuracy) {
+        if (answered == 0 || accuracy < 50) {
+            return "Fácil";
+        }
+        if (accuracy < 80) {
+            return "Média";
+        }
+        return "Avançada";
+    }
+
+    private static String nextAction(int answered, int accuracy, int progress, String weakTopic, int chatQuestions) {
+        if (answered == 0) {
+            return "Responda alguns exercícios para receber uma recomendação personalizada.";
+        }
+        if (chatQuestions > answered) {
+            return "Depois das perguntas ao Titio Renato, pratique exercícios sobre " + weakTopic + ".";
+        }
+        if (accuracy < 50) {
+            return "Revise a base e refaça desafios fáceis.";
+        }
+        if (progress < 70) {
+            return "Continue a trilha e pratique exercícios de dificuldade média.";
+        }
+        return "Avance para desafios mais difíceis e revise fórmulas dimensionais.";
+    }
+
+    private static String topicWithMostErrors(JSONArray events) throws JSONException {
+        Map<String, Integer> errors = new HashMap<>();
+        for (int i = 0; i < events.length(); i++) {
+            JSONObject event = events.getJSONObject(i);
+            if ("exercise_answered".equals(event.optString("event_type")) && event.has("is_correct") && !event.optBoolean("is_correct", true)) {
+                String topic = event.optString("topic", SUBJECT_NAME);
+                errors.put(topic, errors.getOrDefault(topic, 0) + 1);
+            }
+        }
+        String bestTopic = "Fórmulas dimensionais";
+        int bestCount = 0;
+        for (Map.Entry<String, Integer> entry : errors.entrySet()) {
+            if (entry.getValue() > bestCount) {
+                bestTopic = entry.getKey();
+                bestCount = entry.getValue();
+            }
+        }
+        return bestTopic;
+    }
+
+    private static int averageResponseTime(JSONArray events) throws JSONException {
+        int total = 0;
+        int count = 0;
+        for (int i = 0; i < events.length(); i++) {
+            JSONObject event = events.getJSONObject(i);
+            if ("exercise_answered".equals(event.optString("event_type"))) {
+                int value = event.optInt("response_time_seconds", 0);
+                if (value > 0) {
+                    total += value;
+                    count++;
+                }
+            }
+        }
+        return count == 0 ? 0 : Math.round((float) total / count);
+    }
+
+    private static int difficultyAccuracy(JSONArray events, String difficulty) throws JSONException {
+        int total = 0;
+        int correct = 0;
+        for (int i = 0; i < events.length(); i++) {
+            JSONObject event = events.getJSONObject(i);
+            if ("exercise_answered".equals(event.optString("event_type")) && difficulty.equals(event.optString("difficulty"))) {
+                total++;
+                if (event.optBoolean("is_correct", false)) {
+                    correct++;
+                }
+            }
+        }
+        return total == 0 ? 0 : Math.round(correct * 100f / total);
     }
 
     private static JSONObject stats(int userId) throws JSONException {
@@ -724,9 +1206,9 @@ public final class LocalBackend {
         return "u_" + userId + "_" + name;
     }
 
-    private static void seedDemoUser() {
+    private static void seedInitialUser() {
         JSONArray users = new JSONArray();
-        users.put(userJson(1, "Aluno Demo", "aluno@demo.com", "123456", null, false, true));
+        users.put(userJson(1, "Aluno", "aluno@fisica.com", "123456", null, false, true));
         prefs.edit()
                 .putString("users", users.toString())
                 .putInt("next_user_id", 2)
@@ -736,7 +1218,7 @@ public final class LocalBackend {
     private static void repairUserStorage() throws JSONException {
         JSONArray users = users();
         if (users.length() == 0) {
-            seedDemoUser();
+            seedInitialUser();
             return;
         }
 
@@ -753,8 +1235,14 @@ public final class LocalBackend {
             if (!user.has("name") || user.optString("name").trim().isEmpty()) {
                 user.put("name", "Aluno");
             }
+            if ("Aluno Demo".equals(user.optString("name"))) {
+                user.put("name", "Aluno");
+            }
             if (!user.has("email")) {
                 user.put("email", "");
+            }
+            if ("aluno@demo.com".equals(user.optString("email"))) {
+                user.put("email", "aluno@fisica.com");
             }
             if (!user.has("password")) {
                 user.put("password", "");
@@ -777,6 +1265,35 @@ public final class LocalBackend {
                 .commit();
     }
 
+    private static void migrateStorage() throws JSONException {
+        int currentVersion = prefs.getInt("storage_schema_version", 1);
+        if (currentVersion >= 2) {
+            return;
+        }
+        JSONArray allUsers = users();
+        SharedPreferences.Editor editor = prefs.edit();
+        for (int i = 0; i < allUsers.length(); i++) {
+            int userId = allUsers.getJSONObject(i).optInt("id");
+            if (userId <= 0) {
+                continue;
+            }
+            JSONArray events = jsonArray(key(userId, "learning_events"));
+            JSONArray normalized = new JSONArray();
+            for (int eventIndex = 0; eventIndex < events.length(); eventIndex++) {
+                JSONObject event = events.getJSONObject(eventIndex);
+                if (!event.has("topic") || event.optString("topic").trim().isEmpty()) {
+                    event.put("topic", SUBJECT_NAME);
+                }
+                if (!event.has("timestamp")) {
+                    event.put("timestamp", System.currentTimeMillis());
+                }
+                normalized.put(event);
+            }
+            editor.putString(key(userId, "learning_events"), normalized.toString());
+        }
+        editor.putInt("storage_schema_version", 2).apply();
+    }
+
     private static String cleanEmail(String email) {
         return email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
     }
@@ -797,6 +1314,8 @@ public final class LocalBackend {
                 .remove(key(userId, "daily_attempt"))
                 .remove(key(userId, "stats"))
                 .remove(key(userId, "chat_history"))
+                .remove(key(userId, "learning_events"))
+                .remove(key(userId, "active_study_session"))
                 .remove(key(userId, "campaign_camp-base"))
                 .remove(key(userId, "campaign_camp-formulas"))
                 .remove(key(userId, "campaign_camp-coerencia"))

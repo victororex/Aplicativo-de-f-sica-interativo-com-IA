@@ -39,7 +39,7 @@ fun SupportScreen(onBackClick: () -> Unit) {
                 SupportCard(
                     icon = Icons.Default.LockReset,
                     title = "Recuperar senha",
-                    text = "Crie uma nova conta ou use o acesso de teste: aluno@demo.com com senha 123456."
+                    text = "Se esqueceu a senha, crie uma nova conta local ou use o acesso da turma: aluno@fisica.com com senha 123456."
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 SupportCard(

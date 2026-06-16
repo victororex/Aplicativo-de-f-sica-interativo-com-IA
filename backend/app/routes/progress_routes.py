@@ -67,5 +67,16 @@ def complete_lesson(
         """,
         (current_user["id"], current_user["id"]),
     )
+    db.execute(
+        """
+        INSERT INTO analytics_events (
+            user_id, event_type, topic, time_spent_seconds, metadata_json
+        )
+        SELECT ?, 'lesson_completed', s.name, 210, json_object('lesson_id', l.id)
+        FROM lessons l JOIN subjects s ON s.id = l.subject_id
+        WHERE l.id = ?
+        """,
+        (current_user["id"], lesson_id),
+    )
     db.commit()
     return progress_summary(db=db, current_user=current_user)

@@ -1,66 +1,127 @@
-# Backend opcional de IA
+# Backend FastAPI
 
-Este backend FastAPI e opcional para a demo Android. O app usa dados locais para login, aulas, desafios, campanha e progresso. O backend entra apenas quando voce quiser demonstrar:
+Backend do aplicativo Física Interativa. Fornece IA, OCR matemático, gráficos,
+armazenamento, conteúdo e síntese de voz.
 
-- resposta com IA online em `POST /chat/message`;
-- voz online em MP3 em `POST /chat/speech`;
-- chave de IA protegida no `.env`, fora do app Android.
+## Instalação limpa
 
-## Rodar localmente
+Na raiz `backend/`:
 
 ```powershell
-cd backend
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+powershell -ExecutionPolicy Bypass -File .\scripts\install_backend.ps1
 Copy-Item .env.example .env
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Swagger:
+Depois:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+Swagger: `http://127.0.0.1:8000/docs`
+
+## OCR de fórmulas
+
+Endpoint:
 
 ```text
-http://127.0.0.1:8000/docs
+POST /formula/analyze
+Content-Type: multipart/form-data
 ```
 
-No emulador Android, o app acessa o computador por:
+Campos:
 
-```text
-http://10.0.2.2:8000
+- `image`: JPG, PNG ou WEBP obrigatório.
+- `question`: instrução adicional opcional.
+
+Resposta:
+
+```json
+{
+  "ocr_text": "texto reconhecido",
+  "latex": "v = \\frac{d}{t}",
+  "problem_statement": "descrição",
+  "steps": [
+    {
+      "title": "Aplicar a fórmula",
+      "explanation": "Divida a distância pelo tempo.",
+      "latex": "v = \\frac{100}{20}"
+    }
+  ],
+  "final_answer": "v = 5 m/s",
+  "graph": {
+    "expression": "5*x",
+    "label": "Distância pelo tempo",
+    "x_min": 0,
+    "x_max": 20,
+    "points": [{"x": 0, "y": 0}]
+  },
+  "narration_text": "Texto preparado para voz.",
+  "warnings": []
+}
 ```
 
-## Configurar IA real
+O gráfico é opcional. O modelo propõe uma expressão simples e o backend valida e
+amostra os pontos com SymPy. Nenhum código fornecido pelo modelo é executado.
 
-No `backend/.env`:
+## Validação de imagem
+
+- Limite padrão: 8 MB.
+- Dimensão normalizada: 2048 px.
+- Assinatura decodificada com Pillow.
+- Orientação EXIF corrigida.
+- Arquivos inválidos retornam `422`.
+- Tipo não aceito retorna `415`.
+- Arquivo acima do limite retorna `413`.
+- Indisponibilidade da IA retorna `503`.
+
+## Configuração
 
 ```env
-USE_MOCK_AI=false
-OPENAI_API_KEY=sua_chave
+USE_MOCK_AI=true
+OPENAI_API_KEY=
 MODEL_NAME=gpt-4o-mini
-TTS_MODEL=gpt-4o-mini-tts
-TTS_VOICE=marin
+OCR_MODEL=gpt-4o-mini
+AI_TIMEOUT_SECONDS=60
+FORMULA_MAX_UPLOAD_MB=8
+FORMULA_MAX_DIMENSION=2048
+
+OPENVOICE_CHECKPOINTS_DIR=checkpoints_v2
+VOICE_REFERENCE_DIR=voices
+VOICE_TMP_DIR=tmp
+MELOTTS_LANGUAGE=ES
+MELOTTS_SPEED=1.0
 ```
 
-No `local.properties` do projeto Android:
+Use `USE_MOCK_AI=true` para desenvolvimento e testes sem chave. Para OCR real,
+defina `USE_MOCK_AI=false` e `OPENAI_API_KEY`.
 
-```properties
-USE_REMOTE_AI=true
-AI_API_BASE_URL=http://10.0.2.2:8000
+## Voz
+
+`POST /chat/speech` continua recebendo:
+
+```json
+{"text": "Texto para narrar"}
 ```
 
-Se `USE_REMOTE_AI=false`, o app usa o tutor local e continua funcionando sem backend.
+O retorno é `audio/wav`, gerado por MeloTTS e convertido para a voz de referência
+com OpenVoice V2.
 
-## Endpoints usados pelo app
+## Testes
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m compileall app main.py
+.\.venv\Scripts\python.exe scripts/validate_setup.py
+```
+
+Os testes cobrem normalização, rejeição de arquivos inválidos, segurança das
+expressões de gráfico e o contrato HTTP completo em modo mock.
+
+## Endpoints preservados
 
 - `POST /chat/message`
 - `POST /chat/speech`
-
-Os demais endpoints do backend ficam como base tecnica antiga do projeto e nao sao necessarios para a demo local atual.
-
-## Validacao
-
-```powershell
-python -m compileall backend
-```
-
-Nunca coloque `OPENAI_API_KEY` no app Android ou em arquivos versionados.
+- `POST /files/upload`
+- rotas de autenticação, conteúdo, progresso, estatísticas e aprendizado
+- `GET /health`

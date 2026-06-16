@@ -1,23 +1,54 @@
 package com.example.testes.ui.screens
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.testes.ui.components.AppHeroPanel
 import com.example.testes.ui.components.AppScreenBackground
 import com.example.testes.ui.components.AppTopBar
-import com.example.testes.ui.components.AvatarBox
+import com.example.testes.ui.components.GlassCard
+import com.example.testes.ui.components.SectionHeader
+import com.example.testes.ui.theme.CardBorder
+import com.example.testes.ui.theme.Spacing
 import com.example.testes.viewmodel.ProfileViewModel
 
 @Composable
@@ -29,88 +60,63 @@ fun ProfileScreen(
     onSupportClick: () -> Unit,
     onBackClick: () -> Unit
 ) {
-    val user by viewModel.user.collectAsState()
+    val user by viewModel.user.collectAsStateWithLifecycle()
+    val progress by viewModel.progress.collectAsStateWithLifecycle()
+    val xp by viewModel.xp.collectAsStateWithLifecycle()
+    val level by viewModel.level.collectAsStateWithLifecycle()
     var showLogoutDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(title = "Meu Perfil", onBackClick = onBackClick) }
+        topBar = { AppTopBar(title = "Perfil", onBackClick = onBackClick) }
     ) { padding ->
         AppScreenBackground(modifier = Modifier.padding(padding)) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(Spacing.md),
+                verticalArrangement = Arrangement.spacedBy(Spacing.md)
             ) {
-                AppHeroPanel(
-                    title = user.name,
-                    subtitle = user.email.ifBlank { "Perfil do estudante" }
+                ProfileHeader(name = user.name.ifBlank { "Estudante" }, email = user.email, level = level)
+
+                StatChipsRow(
+                    level = level,
+                    xp = xp,
+                    completion = progress.overallCompletion
                 )
 
-                Spacer(modifier = Modifier.height(18.dp))
-
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.extraLarge,
-                    color = MaterialTheme.colorScheme.surface
-                ) {
-                    Row(
-                        modifier = Modifier.padding(18.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        AvatarBox(modifier = Modifier.size(88.dp))
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Conta ativa",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Preferencias, progresso e dados ficam salvos na sua conta.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(18.dp))
-
+                SectionHeader(title = "Conta")
                 ProfileOptionItem(
                     title = "Meu progresso",
-                    subtitle = "Resumo da sua evolucao na demo",
+                    subtitle = "Resumo da sua evolução",
                     icon = Icons.Default.BarChart,
                     onClick = onSeeGeneralProgress
                 )
-
                 ProfileOptionItem(
-                    title = "Configuracoes",
-                    subtitle = "Editar conta e preferencias",
+                    title = "Configurações",
+                    subtitle = "Conta e preferências",
                     icon = Icons.Default.Settings,
                     onClick = onSettingsClick
                 )
-
                 ProfileOptionItem(
                     title = "Suporte",
-                    subtitle = "Ajuda para entrar, recuperar senha ou relatar problema",
+                    subtitle = "Contato e ajuda",
                     icon = Icons.Default.Info,
                     onClick = onSupportClick
                 )
 
-                Spacer(modifier = Modifier.weight(1f))
+                Spacer(Modifier.height(Spacing.sm))
 
-                OutlinedButton(
+                TextButton(
                     onClick = { showLogoutDialog = true },
                     modifier = Modifier.fillMaxWidth().height(52.dp),
-                    shape = MaterialTheme.shapes.medium,
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error.copy(alpha = 0.86f))
                 ) {
                     Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Sair e entrar com outro usuario")
+                    Spacer(Modifier.width(8.dp))
+                    Text("Sair da conta", fontWeight = FontWeight.Medium)
                 }
             }
         }
@@ -119,8 +125,9 @@ fun ProfileScreen(
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
+            containerColor = MaterialTheme.colorScheme.surface,
             title = { Text("Sair da conta?") },
-            text = { Text("Voce voltara para a tela de entrada e podera usar outro usuario.") },
+            text = { Text("Você voltará para a tela de login.") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -128,16 +135,91 @@ fun ProfileScreen(
                         onLogout()
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Sair")
-                }
+                ) { Text("Sair") }
             },
             dismissButton = {
-                TextButton(onClick = { showLogoutDialog = false }) {
-                    Text("Cancelar")
-                }
+                TextButton(onClick = { showLogoutDialog = false }) { Text("Cancelar") }
             }
         )
+    }
+}
+
+@Composable
+private fun ProfileHeader(name: String, email: String, level: Int) {
+    GlassCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(64.dp)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f), CircleShape)
+                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = name.firstOrNull()?.uppercaseChar()?.toString() ?: "E",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            Spacer(Modifier.width(Spacing.md))
+            Column(Modifier.weight(1f)) {
+                Text(name, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
+                Text(
+                    email.ifBlank { "Conta ativa" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Surface(
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                shape = MaterialTheme.shapes.small,
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.24f))
+            ) {
+                Text(
+                    levelBadge(level),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatChipsRow(level: Int, xp: Int, completion: Float) {
+    GlassCard {
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm), modifier = Modifier.fillMaxWidth()) {
+        StatChip("Nível", level.toString(), Modifier.weight(1f))
+        StatChip("XP", xp.toString(), Modifier.weight(1f))
+        StatChip("Progresso", "${(completion * 100).toInt()}%", Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun StatChip(label: String, value: String, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.42f),
+        shape = MaterialTheme.shapes.medium,
+        border = androidx.compose.foundation.BorderStroke(1.dp, CardBorder)
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = Spacing.md, horizontal = Spacing.sm),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(value, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+private fun levelBadge(level: Int): String {
+    return when {
+        level >= 20 -> "Comandante"
+        level >= 10 -> "Piloto"
+        else -> "Cadete"
     }
 }
 
@@ -150,36 +232,27 @@ fun ProfileOptionItem(
 ) {
     Surface(
         onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surface
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = androidx.compose.foundation.BorderStroke(1.dp, CardBorder)
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(Spacing.md),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.primaryContainer
+            Box(
+                Modifier
+                    .size(40.dp)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), MaterialTheme.shapes.small),
+                contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(10.dp).size(24.dp)
-                )
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
             }
-            Spacer(modifier = Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = title, style = MaterialTheme.typography.titleMedium)
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Spacer(Modifier.width(Spacing.md))
+            Column(Modifier.weight(1f)) {
+                Text(text = title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                Text(text = subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }

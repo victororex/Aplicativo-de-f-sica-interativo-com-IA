@@ -8,6 +8,9 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1)
     subject: Optional[str] = None
     level: str = "universitario"
+    context_title: Optional[str] = None
+    context_topic: Optional[str] = None
+    source: Optional[str] = None
 
 
 class ChatResponse(BaseModel):

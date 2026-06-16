@@ -1,0 +1,186 @@
+{
+  "subjectId": "analise-dimensional",
+  "name": "Análise Dimensional",
+  "missions": [
+    {
+      "index": 1,
+      "id": "dim_1_base",
+      "title": "Base dimensional",
+      "subtitle": "Grandezas físicas, unidades e dimensões",
+      "requirements": [],
+      "objectives": [
+        "Diferenciar grandeza, unidade e dimensão.",
+        "Reconhecer as grandezas fundamentais do SI (M, L, T)."
+      ],
+      "contentBlocks": [
+        { "id": "dim_1_exp_1", "type": "text", "title": "O que é grandeza física?", "body": "Grandeza física é tudo aquilo que pode ser medido, como comprimento, massa, tempo, temperatura ou carga elétrica." },
+        { "id": "dim_1_exp_2", "type": "text", "title": "Unidade x dimensão", "body": "A unidade é o padrão que usamos para medir (metro, segundo, quilograma). Dimensão é a natureza da grandeza: comprimento [L], massa [M], tempo [T]." },
+        { "id": "dim_1_exp_3", "type": "list", "title": "Grandezas fundamentais do SI", "items": [
+          "Comprimento → unidade: metro (m) → dimensão: [L].",
+          "Massa → unidade: quilograma (kg) → dimensão: [M].",
+          "Tempo → unidade: segundo (s) → dimensão: [T]."
+        ]}
+      ],
+      "questions": [
+        { "id": "dim_1_q1", "type": "multiple_choice", "statement": "A medida 12 m representa qual grandeza física?", "options": ["Massa","Comprimento","Tempo","Temperatura"], "correctIndex": 1, "explanation": "O metro (m) é a unidade padrão de comprimento no SI." },
+        { "id": "dim_1_q2", "type": "multiple_choice", "statement": "Qual das grandezas abaixo NÃO é fundamental no SI?", "options": ["Tempo","Comprimento","Velocidade","Massa"], "correctIndex": 2, "explanation": "Velocidade é derivada: combina comprimento e tempo, com dimensão [L][T^-1]." },
+        { "id": "dim_1_q3", "type": "multiple_choice", "statement": "A unidade quilograma está associada à dimensão:", "options": ["[L]","[T]","[M]","[L][T^-1]"], "correctIndex": 2, "explanation": "O quilograma é unidade de massa, cuja dimensão é [M]." }
+      ]
+    },
+    {
+      "index": 2,
+      "id": "dim_2_formulas_dimensionais",
+      "title": "Alfabeto das dimensões",
+      "subtitle": "Escrevendo fórmulas dimensionais",
+      "requirements": ["dim_1_base"],
+      "objectives": [
+        "Escrever a fórmula dimensional de grandezas derivadas.",
+        "Associar equações físicas às suas dimensões."
+      ],
+      "contentBlocks": [
+        { "id": "dim_2_exp_1", "type": "text", "title": "Fórmula dimensional", "body": "A dimensão de uma grandeza Q pode ser escrita como [Q] = [M^a L^b T^c], em que a, b e c podem ser positivos, negativos ou zero." },
+        { "id": "dim_2_exp_2", "type": "list", "title": "Exemplos importantes", "items": [
+          "Velocidade v = Δx/Δt → [v] = [L][T^-1].",
+          "Aceleração a = Δv/Δt → [a] = [L][T^-2].",
+          "Força F = m·a → [F] = [M][L][T^-2].",
+          "Trabalho W = F·d → [W] = [M][L^2][T^-2]."
+        ]}
+      ],
+      "questions": [
+        { "id": "dim_2_q1", "type": "multiple_choice", "statement": "A dimensão da velocidade é:", "options": ["[L]","[L][T^-1]","[L][T^-2]","[M][L][T^-2]"], "correctIndex": 1, "explanation": "Velocidade é variação de posição por tempo, com dimensão [L][T^-1]." },
+        { "id": "dim_2_q2", "type": "multiple_choice", "statement": "Para a aceleração escalar a = Δv/Δt, a dimensão correta é:", "options": ["[L][T^-1]","[L][T^-2]","[M][L][T^-2]","[M][L^2][T^-2]"], "correctIndex": 1, "explanation": "Aceleração é variação de velocidade por tempo: [L][T^-1]/[T] = [L][T^-2]." },
+        { "id": "dim_2_q3", "type": "multiple_choice", "statement": "A dimensão da força F, a partir de F = m·a, é:", "options": ["[M][L][T^-2]","[M][L^2][T^-2]","[L][T^-2]","[M][T^-2]"], "correctIndex": 0, "explanation": "m tem [M] e a tem [L][T^-2], logo [F] = [M][L][T^-2]." }
+      ]
+    },
+    {
+      "index": 3,
+      "id": "dim_3_homogeneidade",
+      "title": "Caça-erros de fórmulas",
+      "subtitle": "Homogeneidade dimensional",
+      "requirements": ["dim_1_base","dim_2_formulas_dimensionais"],
+      "objectives": [
+        "Aplicar o princípio da homogeneidade dimensional.",
+        "Identificar equações fisicamente suspeitas."
+      ],
+      "contentBlocks": [
+        { "id": "dim_3_exp_1", "type": "text", "title": "Princípio da homogeneidade", "body": "Uma equação física só pode estar correta se todos os termos somados tiverem a mesma dimensão." },
+        { "id": "dim_3_exp_2", "type": "text", "title": "Constantes adimensionais", "body": "Constantes puras, como π ou números sem unidade, não alteram a dimensão da expressão." }
+      ],
+      "questions": [
+        { "id": "dim_3_q1", "type": "multiple_choice", "statement": "Qual das equações abaixo pode estar correta dimensionalmente?", "options": ["v = v0 + a·t^2","v = v0 + a·t","x = x0 + v·t^2","x = x0 + a·t"], "correctIndex": 1, "explanation": "v e v0 têm [L][T^-1]. Em v = v0 + a·t, a·t tem [L][T^-2]·[T] = [L][T^-1], compatível com v." },
+        { "id": "dim_3_q2", "type": "multiple_choice", "statement": "Na expressão x = x0 + v·t + (1/2)·a·t^2, qual afirmação é correta?", "options": ["O termo v·t tem dimensão diferente de x.","O termo a·t^2 tem dimensão diferente de x.","Todos os termos têm dimensão de comprimento.","A expressão nunca é homogênea."], "correctIndex": 2, "explanation": "x, x0, v·t e a·t^2 têm dimensão [L]; a constante 1/2 é adimensional." },
+        { "id": "dim_3_q3", "type": "true_false", "statement": "Se dois termos somados têm dimensões diferentes, a equação está necessariamente errada do ponto de vista físico.", "correct": true, "explanation": "Somar grandezas com dimensões diferentes não faz sentido físico (como somar metros com segundos)." }
+      ]
+    },
+    {
+      "index": 4,
+      "id": "dim_4_conversao",
+      "title": "Portal de unidades",
+      "subtitle": "Conversão e checagem de coerência",
+      "requirements": ["dim_1_base","dim_2_formulas_dimensionais"],
+      "objectives": [
+        "Converter unidades usando fatores de unidade.",
+        "Checar se resultados têm ordem de grandeza realista."
+      ],
+      "contentBlocks": [
+        { "id": "dim_4_exp_1", "type": "text", "title": "Conversão com fatores de unidade", "body": "Para converter unidades, multiplicamos por fatores iguais a 1, como 1 = 3,6 km/h ÷ 1 m/s, sem alterar a grandeza física." },
+        { "id": "dim_4_exp_2", "type": "text", "title": "Resultados que fazem sentido", "body": "Além de converter corretamente, é importante verificar se o número encontrado é compatível com a situação física." }
+      ],
+      "questions": [
+        { "id": "dim_4_q1", "type": "numeric", "statement": "Converta 20 m/s para km/h.", "answer": 72.0, "tolerance": 0.1, "unit": "km/h", "explanation": "1 m/s = 3,6 km/h, então 20·3,6 = 72 km/h." },
+        { "id": "dim_4_q2", "type": "multiple_choice", "statement": "A força de 10 N pode ser escrita, em termos de unidades básicas, como:", "options": ["10 kg·m","10 kg·m/s","10 kg·m/s^2","10 kg/s^2"], "correctIndex": 2, "explanation": "Newton é kg·m/s^2, coerente com a dimensão [M][L][T^-2]." },
+        { "id": "dim_4_q3", "type": "multiple_choice", "statement": "Um carro a 540 km/h tem velocidade em m/s aproximadamente igual a:", "options": ["15 m/s","54 m/s","150 m/s","540 m/s"], "correctIndex": 2, "explanation": "Divide por 3,6: 540/3,6 ≈ 150 m/s." }
+      ]
+    },
+    {
+      "index": 5,
+      "id": "dim_5_previsao",
+      "title": "Forja de fórmulas",
+      "subtitle": "Prevendo equações com dimensões",
+      "requirements": ["dim_2_formulas_dimensionais","dim_3_homogeneidade"],
+      "objectives": [
+        "Usar dimensões para prever a forma de expressões físicas simples.",
+        "Decidir entre fórmulas candidatas."
+      ],
+      "contentBlocks": [
+        { "id": "dim_5_exp_1", "type": "text", "title": "Ideia geral", "body": "Se conhecemos as grandezas que influenciam um fenômeno, podemos combinar suas dimensões para descobrir como a grandeza resultante depende delas." },
+        { "id": "dim_5_exp_2", "type": "text", "title": "Exemplo: período de um pêndulo", "body": "Supondo que o período T dependa do comprimento L e da gravidade g, a análise dimensional leva a T proporcional a (L/g)^(1/2), até uma constante adimensional." }
+      ],
+      "questions": [
+        { "id": "dim_5_q1", "type": "multiple_choice", "statement": "Uma velocidade característica v depende apenas de g (gravidade) e L (comprimento). Qual expressão é dimensionalmente correta?", "options": ["v ∝ g·L","v ∝ g/L","v ∝ (g·L)^(1/2)","v ∝ (g/L)^2"], "correctIndex": 2, "explanation": "Precisamos de [L][T^-1]. g tem [L][T^-2] e L tem [L]. (g·L)^(1/2) → [L^2][T^-2]^(1/2) = [L][T^-1]." },
+        { "id": "dim_5_q2", "type": "multiple_choice", "statement": "O período T de um pêndulo depende de L e g. Qual fórmula candidata é compatível?", "options": ["T = k·L·g","T = k·L/g","T = k·(L/g)^(1/2)","T = k·(g/L)^(1/2)"], "correctIndex": 2, "explanation": "T tem dimensão [T]. (L/g)^(1/2) também, se g tem [L][T^-2], então a combinação é compatível." },
+        { "id": "dim_5_q3", "type": "multiple_choice", "statement": "Uma força característica F depende apenas de densidade ρ [M][L^-3], área A [L^2] e velocidade v [L][T^-1]. Qual combinação é compatível com F?", "options": ["ρ·A·v","ρ·A·v^2","ρ·A^2·v^2","ρ·v^2"], "correctIndex": 1, "explanation": "ρ·A·v^2 → [M][L^-3]·[L^2]·[L^2][T^-2] = [M][L][T^-2], dimensão de força." }
+      ]
+    },
+    {
+      "index": 6,
+      "id": "dim_6_adimensionais",
+      "title": "Números sem unidade",
+      "subtitle": "Grupos e razões adimensionais",
+      "requirements": ["dim_4_conversao","dim_5_previsao"],
+      "objectives": [
+        "Reconhecer quantidades adimensionais.",
+        "Entender por que números sem unidade são úteis."
+      ],
+      "contentBlocks": [
+        { "id": "dim_6_exp_1", "type": "text", "title": "O que é adimensional?", "body": "Uma quantidade adimensional tem dimensão [1]: é uma razão de grandezas com mesma dimensão, como um coeficiente de arrasto ou uma eficiência." },
+        { "id": "dim_6_exp_2", "type": "text", "title": "Por que isso importa?", "body": "Números adimensionais permitem comparar sistemas diferentes e estabelecer leis de semelhança entre experimentos em escala e sistemas reais." }
+      ],
+      "questions": [
+        { "id": "dim_6_q1", "type": "multiple_choice", "statement": "Qual das grandezas abaixo é adimensional?", "options": ["Índice de refração de um material","Velocidade de um carro","Energia de uma partícula","Tempo de reação"], "correctIndex": 0, "explanation": "Índice de refração é a razão entre velocidades, resultando em número sem unidade." },
+        { "id": "dim_6_q2", "type": "multiple_choice", "statement": "Se dividimos uma energia E1 por outra energia E2, o resultado tem dimensão:", "options": ["[M][L^2][T^-2]","[L][T^-1]","[M]","[1]"], "correctIndex": 3, "explanation": "Razão de grandezas com mesma dimensão é adimensional." },
+        { "id": "dim_6_q3", "type": "multiple_choice", "statement": "Definimos N = ρ·v·L/μ (densidade, velocidade, comprimento, viscosidade). Esse N é:", "options": ["Sempre dimensional","Um candidato a número adimensional","Igual à densidade","Inútil fisicamente"], "correctIndex": 1, "explanation": "Essa combinação é a forma do número de Reynolds, um grupo adimensional em escoamentos." }
+      ]
+    },
+    {
+      "index": 7,
+      "id": "dim_7_buckingham",
+      "title": "Teorema Π",
+      "subtitle": "Construindo grupos adimensionais",
+      "requirements": ["dim_5_previsao","dim_6_adimensionais"],
+      "objectives": [
+        "Aplicar o Teorema Π para contar grupos adimensionais.",
+        "Construir grupos Π simples em exemplos guiados."
+      ],
+      "contentBlocks": [
+        { "id": "dim_7_exp_1", "type": "text", "title": "Enunciado em linguagem simples", "body": "Se um problema envolve n variáveis e r dimensões fundamentais, ele pode ser descrito com n − r grupos adimensionais independentes (os Π)." },
+        { "id": "dim_7_exp_2", "type": "list", "title": "Passos básicos", "items": [
+          "Listar as variáveis e suas dimensões.",
+          "Escolher r variáveis como base.",
+          "Combinar as variáveis restantes com expoentes para obter dimensão [1]."
+        ]}
+      ],
+      "questions": [
+        { "id": "dim_7_q1", "type": "multiple_choice", "statement": "Um problema depende de 4 variáveis e envolve 3 dimensões fundamentais. Quantos grupos Π independentes existem segundo Buckingham?", "options": ["1","2","3","4"], "correctIndex": 0, "explanation": "n − r = 4 − 3 = 1 grupo Π." },
+        { "id": "dim_7_q2", "type": "multiple_choice", "statement": "Qual afirmação é verdadeira sobre o Teorema Π?", "options": ["Ele fornece o valor exato das constantes numéricas.","Ele garante que sempre haverá apenas um grupo adimensional.","Ele reduz o número de variáveis combinando-as em grupos sem dimensão.","Ele não pode ser usado em fluidos."], "correctIndex": 2, "explanation": "O teorema reduz o número de variáveis a alguns grupos adimensionais independentes." },
+        { "id": "dim_7_q3", "type": "open", "statement": "Explique por que o Teorema Π não determina a forma funcional exata entre os grupos adimensionais.", "placeholder": "Explique em 2–3 frases.", "explanation": "Ele só garante que existe uma relação entre os grupos; a forma da função precisa ser obtida por teoria, experimento ou simulação." }
+      ]
+    },
+    {
+      "index": 8,
+      "id": "dim_8_desafio",
+      "title": "Desafio final",
+      "subtitle": "Universo dimensional",
+      "requirements": ["dim_3_homogeneidade","dim_4_conversao","dim_5_previsao","dim_6_adimensionais","dim_7_buckingham"],
+      "objectives": [
+        "Combinar todos os conceitos em problemas maiores.",
+        "Argumentar sobre validade dimensional de fórmulas."
+      ],
+      "contentBlocks": [
+        { "id": "dim_8_exp_1", "type": "text", "title": "Hora de juntar tudo", "body": "Agora você vai usar tudo: dimensões, homogeneidade, conversões de unidade, previsão de fórmulas e grupos adimensionais em problemas completos." }
+      ],
+      "questions": [
+        { "id": "dim_8_q1", "type": "multi_step", "statement": "A potência P liberada em um fenômeno depende apenas de densidade ρ, comprimento L e velocidade v. a) Escreva as dimensões de P, ρ, L e v. b) Use análise dimensional para encontrar uma combinação P ∝ ρ^a L^b v^c compatível.", "steps": [
+          "Identificar dimensões de P, ρ, L e v.",
+          "Montar as equações para a, b, c.",
+          "Encontrar uma combinação dimensionalmente correta."
+        ], "explanation": "Esse tipo de problema ilustra o uso prático da análise dimensional para prever a forma de leis de escala." },
+        { "id": "dim_8_q2", "type": "multi_step", "statement": "Um modelo em túnel de vento tem escala 1:10 em comprimento em relação ao protótipo real. a) O que significa ter similitude geométrica? b) Por que manter o mesmo número de Reynolds é importante para comparar resultados?", "steps": [
+          "Definir similitude geométrica.",
+          "Relacionar similitude dinâmica com a igualdade de números adimensionais."
+        ], "explanation": "Aqui o aluno conecta grupos adimensionais com semelhança entre modelo e protótipo." },
+        { "id": "dim_8_q3", "type": "multiple_choice", "statement": "Qual alternativa descreve melhor uma limitação da análise dimensional?", "options": ["Ela só vale para grandezas escalares.","Ela não garante a forma funcional exata da solução.","Ela não pode ser aplicada a fluidos.","Ela exige sempre uso de 3 dimensões fundamentais."], "correctIndex": 1, "explanation": "A análise dimensional reduz variáveis e sugere grupos, mas não determina a função exata entre eles." }
+      ]
+    }
+  ]
+}

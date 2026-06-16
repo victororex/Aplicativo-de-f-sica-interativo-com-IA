@@ -37,6 +37,8 @@ def daily_challenge(db: sqlite3.Connection = Depends(get_db)):
             explanation=row["explanation"],
             subject_id=row["subject_id"],
             subject_name=row["subject_name"],
+            difficulty=row["difficulty"],
+            topic=row["topic"],
         )
         for row in rows
     ]
@@ -86,6 +88,7 @@ def submit_daily_challenge(
         """,
         (request.total, request.score, current_user["id"]),
     )
+    _record_aggregate_attempts(db, current_user["id"], "Desafio diario", request.score, request.total, "Media")
     db.commit()
     return QuizResultResponse(
         score=request.score,
@@ -178,6 +181,11 @@ def submit_campaign_stage(
         """,
         (request.total, request.score, current_user["id"]),
     )
+    topic = db.execute(
+        "SELECT title FROM campaign_nodes WHERE id = ?",
+        (node_id,),
+    ).fetchone()["title"]
+    _record_aggregate_attempts(db, current_user["id"], topic, request.score, request.total, "Media")
     db.commit()
     return QuizResultResponse(
         score=request.score,
@@ -430,3 +438,22 @@ def _campaign_mission(subject_id: str, subject_name: str) -> dict:
             ],
         },
     )
+
+
+def _record_aggregate_attempts(
+    db: sqlite3.Connection,
+    user_id: int,
+    topic: str,
+    score: int,
+    total: int,
+    difficulty: str,
+) -> None:
+    for index in range(total):
+        db.execute(
+            """
+            INSERT INTO analytics_events (
+                user_id, event_type, topic, is_correct, difficulty, time_spent_seconds
+            ) VALUES (?, 'exercise_answered', ?, ?, ?, 30)
+            """,
+            (user_id, topic, index < score, difficulty),
+        )

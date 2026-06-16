@@ -26,16 +26,51 @@ else:
     import_error = None
 
 
-def generate_physics_response(user_message: str, level: str = "universitario", subject: str | None = None) -> str:
-    if not user_message.strip():
-        return "Erro: a pergunta nao pode estar vazia."
+FALLBACK_RESPONSE = (
+    "Nao consegui responder agora porque a conexao com a IA falhou. "
+    "Tente novamente em instantes ou revise a aula de Analise Dimensional."
+)
 
-    prompt = f"Nivel do aluno: {level}\n"
+
+def generate_physics_response(
+    user_message: str,
+    level: str = "universitario",
+    subject: str | None = None,
+    context_title: str | None = None,
+    context_topic: str | None = None,
+    source: str | None = None,
+) -> str:
+    if not user_message.strip():
+        return "Envie uma pergunta sobre Fisica para eu poder ajudar."
+
+    prompt = (
+        "Contexto do aplicativo:\n"
+        "- Aplicativo educacional brasileiro de Fisica.\n"
+        "- Tutor: Titio Renato.\n"
+        "- Tema principal atual: Analise Dimensional.\n"
+        "- Responder sempre em portugues do Brasil.\n"
+        "- Usar formato didatico com resposta curta, passo a passo, formula, exemplo e resumo quando possivel.\n\n"
+        f"Nivel do aluno: {level}\n"
+    )
     if subject:
         prompt += f"Assunto: {subject}\n"
+    if context_title:
+        prompt += f"Contexto de tela/aula: {context_title}\n"
+    if context_topic:
+        prompt += f"Topico relacionado: {context_topic}\n"
+    if source:
+        prompt += f"Origem da pergunta: {source}\n"
     prompt += f"Pergunta: {user_message}"
 
     if responder_texto is None:
-        return f"Erro ao carregar modulo de IA: {import_error}"
+        return FALLBACK_RESPONSE
 
-    return responder_texto(prompt)
+    try:
+        answer = responder_texto(prompt).strip()
+    except Exception:
+        return FALLBACK_RESPONSE
+
+    if not answer or answer.lower().startswith("erro:"):
+        return FALLBACK_RESPONSE
+
+    return answer

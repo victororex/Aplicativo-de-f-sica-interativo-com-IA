@@ -1,117 +1,115 @@
-# Aplicativo de Fisica Interativo com IA
+# Física Interativa
 
-Demo Android em Kotlin/Compose para estudo de **Analise Dimensional**. O app funciona sem servidor para login, aulas, desafios, campanha, progresso e historico de conversa. A IA online e opcional e passa pelo backend Python, mantendo a chave fora do APK.
+App Android educacional para Análise Dimensional com tutor IA ("Renato"), trilha de missões,
+desafio diário, OCR de fórmulas e voz personalizada.
 
-## O que a demo entrega
+Stack: Kotlin 2.2 · Jetpack Compose · MVVM · SharedPreferences (local) · FastAPI · SQLite ·
+OpenAI Vision (`gpt-4o-mini`) · MeloTTS → OpenVoice V2.
 
-- Login e cadastro locais por usuario.
-- Aulas autorais de Analise Dimensional, com exemplos e treino guiado.
-- Desafio diario que so conta uma vez por dia.
-- Campanha em formato de fases com exercicios interativos.
-- Minha Evolucao com acertos, tempo estimado, perguntas e fases vencidas.
-- Chat **Converse com o titio Renato** com tutor local e opcao de IA online.
-- Voz opcional: o usuario escolhe se quer escutar as respostas.
-- Suporte, configuracoes, logout e exclusao de conta local.
+## Funcionalidades
 
-## Arquitetura
+- Cadastro, login, perfil, progresso e histórico locais.
+- Aulas e desafio diário de Análise Dimensional com adaptação por desempenho.
+- Trilha de campanha por etapas.
+- Chat com tutor IA + voz clonada do professor (fallback para TTS do dispositivo).
+- OCR de fórmulas em imagem → passos resolvidos + gráfico.
+- Painel adaptativo (Dashboard) com XP, nível, evolução e recomendações.
 
-```text
-Android Kotlin/Compose
-    |
-    |-- LocalBackend.java
-    |      login, aulas, progresso, desafios, campanha e historico
-    |
-    |-- ChatApiClient
-           tutor local por padrao
-           backend opcional para IA e voz online
-```
+## Pré-requisitos
 
-O backend Python fica em `backend/` e e opcional para a demo. Ele deve ser usado quando voce quiser apresentar respostas com IA real ou voz gerada online.
+- **Android Studio Ladybug+** com JDK 17.
+- **Python 3.11+** para o backend.
+- Opcional: GPU com CUDA para acelerar a voz clonada.
+- Opcional: chave da OpenAI (necessária para OCR remoto e Chat remoto).
 
-## Rodar o app
+## Configuração — Android
 
-Abra o projeto no Android Studio ou use:
+1. Copie `local.properties.example` (se existir) ou crie um `local.properties`:
+   ```properties
+   USE_REMOTE_AI=true
+   AI_API_BASE_URL=http://10.0.2.2:8000
+   ```
+2. Abra o projeto no Android Studio e rode no emulador (`10.0.2.2` aponta para `localhost` do host).
 
-```powershell
-.\gradlew.bat :app:compileDebugKotlin --console=plain
-.\gradlew.bat :app:installDebug --console=plain
-```
+## Configuração — Backend
 
-O app abre e funciona sem iniciar o backend.
-
-Conta de teste:
-
-```text
-E-mail: aluno@demo.com
-Senha: 123456
-```
-
-## Usar IA online com seguranca
-
-Por padrao, a IA online vem desligada:
-
-```properties
-USE_REMOTE_AI=false
-AI_API_BASE_URL=http://10.0.2.2:8000
-```
-
-Para ligar a IA online apenas na sua maquina, adicione ao `local.properties`:
-
-```properties
-USE_REMOTE_AI=true
-AI_API_BASE_URL=http://10.0.2.2:8000
-```
-
-Depois configure o backend:
-
-```powershell
+```bash
 cd backend
-python -m venv venv
-.\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-Copy-Item .env.example .env
+python main.py
 ```
 
-No `backend/.env`, use:
+Variáveis de ambiente principais:
 
-```env
-USE_MOCK_AI=false
-OPENAI_API_KEY=sua_chave
-TTS_MODEL=gpt-4o-mini-tts
-TTS_VOICE=marin
+| Variável | Padrão | Descrição |
+|----------|--------|-----------|
+| `OPENAI_API_KEY` | — | Necessária para OCR e Chat reais. |
+| `USE_MOCK_AI` | `true` | Em produção, mude para `false`. |
+| `JWT_SECRET_KEY` | placeholder | **Obrigatório** trocar em produção (lifespan aborta se estiver no default). |
+| `APP_ENV` | `development` | Use `production` para validações estritas. |
+| `VOICE_REFERENCE_DIR` | `voices` | Pasta com `professor.wav` (ou outro `.wav` de fallback). |
+| `OPENVOICE_CHECKPOINTS_DIR` | `checkpoints_v2` | Pesos do OpenVoice V2. |
+| `MELOTTS_LANGUAGE` | `ES` | Código de idioma do MeloTTS. |
+| `ALLOWED_ORIGINS` | locais | Em produção, restrinja explicitamente. |
+
+## Arquitetura de estado
+
+- `LocalBackend.java` é o banco local (SharedPreferences) — fonte primária offline.
+- `AppStateBus` (`data/state/AppStateBus.kt`) propaga eventos (`LessonCompleted`,
+  `DailyChallengeSubmitted`, `CampaignStageSubmitted`, `ChatMessageSent`, `OcrAnalyzed`,
+  `LessonOpened`, `ProfileUpdated`) para que `HomeViewModel`, `ProfileViewModel` e
+  `DashboardViewModel` se atualizem sem refresh manual.
+- Sessões de estudo são iniciadas/finalizadas em `MainActivity.onResume/onPause`.
+
+## Design System
+
+- Paleta fria em `ui/theme/Color.kt` (Background `#08111F`, Primary `#4F8EF7`, etc.).
+- Tipografia enxuta em `Type.kt`.
+- Componentes em `ui/components/AppComponents.kt`: `GlassCard`, `PrimaryButton`, `GhostButton`,
+  `SectionHeader`, `StatusChip`, `EmptyState`, `AppTopBar`, `BottomNavigationBar`.
+- Tokens em `DesignTokens.kt` (`Spacing.*`, `Radius.*`, `Elevation.*`).
+
+## Rate limit do backend
+
+- `/chat/message`: 30 req/min por usuário.
+- `/chat/speech`: 10 req/min por usuário.
+- `/formula/analyze`: 10 req/min por usuário.
+
+Implementação em `backend/app/rate_limit.py` (in-memory; trocar por Redis para multi-instância).
+
+## Logs
+
+`logging.basicConfig` configurado em `backend/main.py`. Marcadores úteis: `[TTS]`, `[CHAT]`,
+`[CONFIG]`. No Android: `Log.i/w/e` tag `"TTS"` no `ChatScreen`.
+
+## Build
+
+- Android debug: `./gradlew :app:assembleDebug`
+- Backend dev: `python backend/main.py`
+
+## Estrutura
+
 ```
+app/src/main/java/com/example/testes/
+├── data/
+│   ├── api/        # Clients (Chat, Content, Stats, Learning, Auth, Formula, Session)
+│   ├── local/      # LocalBackend.java (SharedPreferences store)
+│   └── state/      # AppStateBus
+├── model/          # Data classes
+├── navigation/     # NavGraph, Screen
+├── ui/
+│   ├── components/ # AppComponents (design system)
+│   ├── screens/    # Telas
+│   └── theme/      # Color, Type, Theme, DesignTokens
+└── viewmodel/      # ViewModels (Home, Profile, Chat, Lessons, Dashboard, FormulaScan)
 
-Inicie:
-
-```powershell
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+backend/
+├── app/
+│   ├── routes/     # FastAPI routes
+│   ├── services/   # AI, OCR, Speech, etc.
+│   ├── rate_limit.py
+│   └── config.py
+├── tts/            # MeloTTS + OpenVoice V2
+├── voices/         # professor.wav
+└── main.py
 ```
-
-Importante: a chave fica somente no `.env` do backend. Nao coloque chave no codigo Android nem no repositorio.
-
-## Validacao recomendada
-
-```powershell
-.\gradlew.bat :app:compileDebugKotlin --console=plain
-python -m compileall backend
-```
-
-No emulador, confira:
-
-- cadastro e login sem crash;
-- somente Analise Dimensional aparece;
-- desafio diario bloqueia nova tentativa no mesmo dia;
-- campanha com progresso inicial em 0 para usuario novo;
-- aulas e campanha atualizam Minha Evolucao;
-- chat mantem historico;
-- suporte abre pelo login e perfil;
-- logout volta para a entrada;
-- exclusao de conta remove o usuario local;
-- modo claro e escuro continuam legiveis.
-
-## Observacoes para apresentacao
-
-- O app e uma demo local, pensada para funcionar bem no emulador e em apresentacoes.
-- A IA online e opcional para nao bloquear a demo quando nao houver internet ou chave configurada.
-- O conteudo e autoral em portugues e focado apenas em Analise Dimensional.
-- O arquivo de bugreport gerado pelo emulador nao deve entrar no commit.

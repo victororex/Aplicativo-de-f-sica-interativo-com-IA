@@ -22,7 +22,7 @@ fun ProgressScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(title = "Minha Evolucao", onBackClick = onBackClick) }
+        topBar = { AppTopBar(title = "Minha Evolução", onBackClick = onBackClick) }
     ) { padding ->
         AppScreenBackground(modifier = Modifier.padding(padding)) {
             LazyColumn(
@@ -33,7 +33,7 @@ fun ProgressScreen(
                 item {
                     Text(text = "Resumo geral", style = MaterialTheme.typography.titleLarge)
                     Spacer(modifier = Modifier.height(16.dp))
-                    ProgressCard(title = "Analise Dimensional", progress = progress.overallCompletion)
+                    ProgressCard(title = "Análise Dimensional", progress = progress.overallCompletion)
                     Text(
                         text = "Estudo atual: ${progress.currentModule.ifBlank { "Comece uma aula" }}",
                         style = MaterialTheme.typography.bodyMedium

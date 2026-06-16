@@ -45,7 +45,7 @@ fun GeneralProgressScreen(
                 item {
                     AppHeroPanel(
                         title = "${(averageProgress * 100).toInt()}% do caminho",
-                        subtitle = "$completedLessons de $totalLessons aulas concluidas. Continue pela proxima aula de Analise Dimensional."
+                        subtitle = "$completedLessons de $totalLessons aulas concluídas. Continue pela próxima aula de Análise Dimensional."
                     )
                 }
 
@@ -54,13 +54,13 @@ fun GeneralProgressScreen(
                         ProgressSummaryCard(
                             label = "Aulas feitas",
                             value = completedLessons.toString(),
-                            iconColor = Color(0xFF00A99D),
+                            iconColor = MaterialTheme.colorScheme.tertiary,
                             modifier = Modifier.weight(1f)
                         )
                         ProgressSummaryCard(
                             label = "Trilha",
                             value = subjects.size.toString(),
-                            iconColor = Color(0xFFFFC857),
+                            iconColor = MaterialTheme.colorScheme.secondary,
                             modifier = Modifier.weight(1f)
                         )
                     }

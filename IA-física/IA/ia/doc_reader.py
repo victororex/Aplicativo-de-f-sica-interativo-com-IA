@@ -1,6 +1,4 @@
 from pathlib import Path
-from pypdf import PdfReader
-from docx import Document
 
 
 def ler_txt(caminho_arquivo: str) -> str:
@@ -9,6 +7,11 @@ def ler_txt(caminho_arquivo: str) -> str:
 
 
 def ler_pdf(caminho_arquivo: str) -> str:
+    try:
+        from pypdf import PdfReader
+    except Exception:
+        return "ERRO: suporte a PDF indisponivel neste ambiente. Reinstale pypdf para ler este formato."
+
     leitor = PdfReader(caminho_arquivo)
     textos = []
 
@@ -21,6 +24,11 @@ def ler_pdf(caminho_arquivo: str) -> str:
 
 
 def ler_docx(caminho_arquivo: str) -> str:
+    try:
+        from docx import Document
+    except Exception:
+        return "ERRO: suporte a DOCX indisponivel neste ambiente. Reinstale python-docx e lxml para ler este formato."
+
     documento = Document(caminho_arquivo)
     paragrafos = []
 

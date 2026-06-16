@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Placeholder do personagem "Renato".
+  Substitua por renato_character.png (render do .obj com fundo transparente)
+  e remova este XML. Mesmo R.drawable.renato_character.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="220dp"
+    android:height="280dp"
+    android:viewportWidth="220"
+    android:viewportHeight="280">
+    <!-- Glow externo -->
+    <path
+        android:pathData="M110,150m-95,0a95,95 0,1 1,190 0a95,95 0,1 1,-190 0"
+        android:fillColor="#1F4F8EF7" />
+    <!-- Capacete / cabeça -->
+    <path
+        android:pathData="M110,90m-32,0a32,32 0,1 1,64 0a32,32 0,1 1,-64 0"
+        android:fillColor="#142338" />
+    <path
+        android:pathData="M110,90m-32,0a32,32 0,1 1,64 0a32,32 0,1 1,-64 0"
+        android:strokeColor="#4F8EF7"
+        android:strokeWidth="2"
+        android:fillColor="#00000000" />
+    <!-- Visor refletindo -->
+    <path
+        android:pathData="M85,80h50v22a14,14 0 0 1 -14,14 h-22a14,14 0 0 1 -14,-14 z"
+        android:fillColor="#8FB6FF" />
+    <!-- Corpo / traje -->
+    <path
+        android:pathData="M70,130 h80 a16,16 0 0 1 16,16 V230 a16,16 0 0 1 -16,16 H70 a16,16 0 0 1 -16,-16 V146 a16,16 0 0 1 16,-16 z"
+        android:fillColor="#172034" />
+    <path
+        android:pathData="M70,130 h80 a16,16 0 0 1 16,16 V230 a16,16 0 0 1 -16,16 H70 a16,16 0 0 1 -16,-16 V146 a16,16 0 0 1 16,-16 z"
+        android:strokeColor="#4F8EF7"
+        android:strokeWidth="2"
+        android:fillColor="#00000000" />
+    <!-- Emblema central -->
+    <path
+        android:pathData="M110,178m-14,0a14,14 0,1 1,28 0a14,14 0,1 1,-28 0"
+        android:fillColor="#4F8EF7" />
+    <path
+        android:pathData="M110,178m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0"
+        android:fillColor="#8FB6FF" />
+</vector>

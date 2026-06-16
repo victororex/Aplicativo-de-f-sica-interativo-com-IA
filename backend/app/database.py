@@ -165,6 +165,31 @@ def init_db() -> None:
                 sort_order INTEGER NOT NULL DEFAULT 0
             );
 
+            CREATE TABLE IF NOT EXISTS analytics_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                event_type TEXT NOT NULL,
+                topic TEXT NOT NULL DEFAULT 'Fisica',
+                is_correct INTEGER,
+                difficulty TEXT,
+                response_time_seconds INTEGER NOT NULL DEFAULT 0,
+                time_spent_seconds INTEGER NOT NULL DEFAULT 0,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS study_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                topic TEXT NOT NULL DEFAULT 'Fisica',
+                started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                completed_at TEXT,
+                duration_seconds INTEGER NOT NULL DEFAULT 0,
+                is_completed INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+
             CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);
             CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id);
             CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON chat_sessions(user_id);
@@ -176,9 +201,13 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_campaign_nodes_subject_id ON campaign_nodes(subject_id);
             CREATE INDEX IF NOT EXISTS idx_campaign_progress_user_id ON campaign_progress(user_id);
             CREATE INDEX IF NOT EXISTS idx_avatar_items_category ON avatar_items(category);
+            CREATE INDEX IF NOT EXISTS idx_analytics_user_created ON analytics_events(user_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_analytics_user_topic ON analytics_events(user_id, topic);
+            CREATE INDEX IF NOT EXISTS idx_sessions_user_started ON study_sessions(user_id, started_at);
             """
         )
         _ensure_user_settings_columns(db)
+        _ensure_learning_columns(db)
         _seed_content(db)
 
 
@@ -188,6 +217,17 @@ def _ensure_user_settings_columns(db: sqlite3.Connection) -> None:
         "phone": "ALTER TABLE users ADD COLUMN phone TEXT",
         "private_account": "ALTER TABLE users ADD COLUMN private_account INTEGER NOT NULL DEFAULT 0",
         "notifications_enabled": "ALTER TABLE users ADD COLUMN notifications_enabled INTEGER NOT NULL DEFAULT 1",
+    }
+    for column, statement in migrations.items():
+        if column not in columns:
+            db.execute(statement)
+
+
+def _ensure_learning_columns(db: sqlite3.Connection) -> None:
+    columns = {row["name"] for row in db.execute("PRAGMA table_info(daily_questions)").fetchall()}
+    migrations = {
+        "difficulty": "ALTER TABLE daily_questions ADD COLUMN difficulty TEXT NOT NULL DEFAULT 'Media'",
+        "topic": "ALTER TABLE daily_questions ADD COLUMN topic TEXT NOT NULL DEFAULT 'Fisica'",
     }
     for column, statement in migrations.items():
         if column not in columns:
@@ -243,15 +283,20 @@ def _seed_content(db: sqlite3.Connection) -> None:
     for question in DAILY_QUESTIONS:
         db.execute(
             """
-            INSERT INTO daily_questions (id, question, options_json, correct_index, explanation, subject_id, sort_order)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO daily_questions (
+                id, question, options_json, correct_index, explanation,
+                subject_id, sort_order, difficulty, topic
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 question = excluded.question,
                 options_json = excluded.options_json,
                 correct_index = excluded.correct_index,
                 explanation = excluded.explanation,
                 subject_id = excluded.subject_id,
-                sort_order = excluded.sort_order
+                sort_order = excluded.sort_order,
+                difficulty = excluded.difficulty,
+                topic = excluded.topic
             """,
             (
                 question["id"],
@@ -261,6 +306,8 @@ def _seed_content(db: sqlite3.Connection) -> None:
                 question["explanation"],
                 question["subject_id"],
                 question["sort_order"],
+                question.get("difficulty", "Media"),
+                question.get("topic", question["subject_id"].replace("-", " ").title()),
             ),
         )
 

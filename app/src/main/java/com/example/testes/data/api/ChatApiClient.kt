@@ -17,7 +17,10 @@ data class QuestionRequest(
     val sessionId: Int? = null,
     val message: String,
     val subject: String? = null,
-    val level: String = "universitario"
+    val level: String = "universitario",
+    val contextTitle: String? = null,
+    val contextTopic: String? = null,
+    val source: String? = null
 )
 
 data class AiResponse(
@@ -25,39 +28,66 @@ data class AiResponse(
     val userMessage: String,
     val aiResponse: String,
     val usedRemoteAi: Boolean = false,
-    val fallbackReason: String? = null
+    val fallbackReason: String? = null,
+    val responseTimeMs: Long = 0L
 )
 
 class ChatApiClient {
+    private val fallbackMessage = "Nao consegui responder agora porque a conexao com a IA falhou. Tente novamente em instantes ou revise a aula de Analise Dimensional."
+
     suspend fun sendMessage(request: QuestionRequest): Result<AiResponse> = withContext(Dispatchers.IO) {
         runCatching {
+            val startedAt = System.currentTimeMillis()
             if (BuildConfig.USE_REMOTE_AI) {
                 val remoteResult = runCatching { sendRemoteMessage(request) }
                 if (remoteResult.isSuccess) {
-                    val remote = remoteResult.getOrThrow()
+                    val remote = remoteResult.getOrThrow().copy(responseTimeMs = System.currentTimeMillis() - startedAt)
                     LocalBackend.saveChatExchange(
                         SessionManager.accessToken,
                         remote.userMessage,
                         remote.aiResponse
                     )
+                    LocalBackend.recordChatEvent(
+                        SessionManager.accessToken,
+                        "chat_question_sent",
+                        request.contextTopic ?: request.subject ?: "Analise Dimensional",
+                        0
+                    )
+                    LocalBackend.recordChatEvent(
+                        SessionManager.accessToken,
+                        "chat_api_success",
+                        request.contextTopic ?: request.subject ?: "Analise Dimensional",
+                        ((remote.responseTimeMs + 999) / 1000).toInt()
+                    )
+                    LocalBackend.incrementChatStats(SessionManager.accessToken)
                     remote
                 } else {
                     val json = LocalBackend.chat(SessionManager.accessToken, request.message)
+                    val elapsed = System.currentTimeMillis() - startedAt
+                    LocalBackend.recordChatEvent(
+                        SessionManager.accessToken,
+                        "chat_api_failed",
+                        request.contextTopic ?: request.subject ?: "Analise Dimensional",
+                        ((elapsed + 999) / 1000).toInt()
+                    )
                     AiResponse(
                         sessionId = json.optIntOrNull("session_id"),
                         userMessage = json.optString("user_message"),
-                        aiResponse = json.optString("ai_response"),
+                        aiResponse = json.optString("ai_response").ifBlank { fallbackMessage },
                         usedRemoteAi = false,
-                        fallbackReason = "A IA online nao respondeu. Usei o tutor local para nao interromper o estudo."
+                        fallbackReason = fallbackMessage,
+                        responseTimeMs = elapsed
                     )
                 }
             } else {
                 val json = LocalBackend.chat(SessionManager.accessToken, request.message)
+                val elapsed = System.currentTimeMillis() - startedAt
                 AiResponse(
                     sessionId = json.optIntOrNull("session_id"),
                     userMessage = json.optString("user_message"),
                     aiResponse = json.optString("ai_response"),
-                    usedRemoteAi = false
+                    usedRemoteAi = false,
+                    responseTimeMs = elapsed
                 )
             }
         }
@@ -80,18 +110,30 @@ class ChatApiClient {
 
     suspend fun synthesizeSpeech(text: String): Result<ByteArray> = withContext(Dispatchers.IO) {
         runCatching {
-            if (!BuildConfig.USE_REMOTE_AI) {
-                throw IllegalStateException("Voz online desativada.")
-            }
 
             val payload = JSONObject().put("text", text)
             val connection = openPost("/chat/speech")
             writeJson(connection, payload)
             val code = connection.responseCode
             if (code !in 200..299) {
-                throw IllegalStateException("Voz online indisponivel.")
+                val err = readBody(connection, code)
+                throw IllegalStateException(remoteErrorMessage(err).ifBlank { "Voz personalizada indisponível (HTTP $code)." })
             }
             connection.inputStream.use { it.readBytes() }
+        }
+    }
+
+    suspend fun voiceStatus(): Result<JSONObject> = withContext(Dispatchers.IO) {
+        runCatching {
+            val baseUrl = BuildConfig.AI_API_BASE_URL.trimEnd('/')
+            val connection = URL("$baseUrl/voice/status").openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 3000
+            connection.readTimeout = 4000
+            val code = connection.responseCode
+            val raw = readBody(connection, code)
+            if (code !in 200..299) throw IllegalStateException("Status indisponível (HTTP $code).")
+            JSONObject(raw)
         }
     }
 
@@ -101,6 +143,9 @@ class ChatApiClient {
             .put("message", request.message)
             .put("subject", request.subject ?: "Analise Dimensional")
             .put("level", request.level)
+            .put("context_title", request.contextTitle ?: JSONObject.NULL)
+            .put("context_topic", request.contextTopic ?: JSONObject.NULL)
+            .put("source", request.source ?: JSONObject.NULL)
 
         val connection = openPost("/chat/message")
         writeJson(connection, payload)
@@ -115,7 +160,7 @@ class ChatApiClient {
         return AiResponse(
             sessionId = json.optIntOrNull("session_id"),
             userMessage = json.optString("user_message", request.message),
-            aiResponse = json.optString("ai_response", LocalBackend.localTutorAnswer(request.message)),
+            aiResponse = json.optString("ai_response", fallbackMessage).ifBlank { fallbackMessage },
             usedRemoteAi = true
         )
     }
@@ -125,11 +170,11 @@ class ChatApiClient {
         val connection = URL("$baseUrl$path").openConnection() as HttpURLConnection
         connection.requestMethod = "POST"
         connection.connectTimeout = 4500
-        connection.readTimeout = 18000
+        connection.readTimeout = if (path == "/chat/speech") 180_000 else 18_000
         connection.doInput = true
         connection.doOutput = true
         connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-        connection.setRequestProperty("Accept", if (path == "/chat/speech") "audio/mpeg" else "application/json")
+        connection.setRequestProperty("Accept", if (path == "/chat/speech") "audio/wav" else "application/json")
         return connection
     }
 

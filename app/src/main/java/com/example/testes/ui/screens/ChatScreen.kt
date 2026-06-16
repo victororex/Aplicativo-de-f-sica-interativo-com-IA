@@ -1,43 +1,56 @@
 package com.example.testes.ui.screens
 
 import android.Manifest
+import android.util.Log
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.media.MediaPlayer
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
-import android.speech.tts.Voice
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,133 +59,150 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.testes.data.api.ChatApiClient
-import com.example.testes.ui.components.AppHeroPanel
+import com.example.testes.data.voice.RemoteVoicePlayer
+import com.example.testes.data.voice.VoiceSettingsRepository
 import com.example.testes.ui.components.AppScreenBackground
 import com.example.testes.ui.components.AppTopBar
+import com.example.testes.ui.components.AssistantAvatar
+import com.example.testes.ui.components.AvatarScene
 import com.example.testes.ui.components.ChatMessageBubble
+import com.example.testes.ui.components.GlassCard
 import com.example.testes.ui.components.VoiceButton
 import com.example.testes.viewmodel.ChatViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import java.io.File
 import java.util.Locale
 
+private const val TAG_TTS = "TTS"
+private const val TAG_ATTACH = "ChatAttachment"
+
+/** Pedido para abrir um launcher de anexo logo quando o Chat é aberto (vindo de atalho externo). */
+enum class AttachmentRequest { CameraNow }
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
+fun ChatScreen(
+    viewModel: ChatViewModel,
+    onBackClick: () -> Unit,
+    onOpenLesson: (String) -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+    initialAttachmentRequest: AttachmentRequest? = null
+) {
     val context = LocalContext.current
-    val messages by viewModel.messages.collectAsState()
-    val isSending by viewModel.isSending.collectAsState()
-    val statusMessage by viewModel.statusMessage.collectAsState()
+    val messages by viewModel.messages.collectAsStateWithLifecycle()
+    val isSending by viewModel.isSending.collectAsStateWithLifecycle()
+    val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
+    val lastFailedPrompt by viewModel.lastFailedPrompt.collectAsStateWithLifecycle()
+    val suggestedQuestions by viewModel.suggestedQuestions.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val clipboardManager = LocalClipboardManager.current
     val chatApiClient = remember { ChatApiClient() }
+    val voiceSettingsRepository = remember { VoiceSettingsRepository(context) }
     var textState by remember { mutableStateOf("") }
     var isListening by remember { mutableStateOf(false) }
     var voiceStatus by remember { mutableStateOf<String?>(null) }
     var lastSpokenMessageId by remember { mutableStateOf("1") }
-    var ttsReady by remember { mutableStateOf(false) }
     var voiceResponsesEnabled by rememberSaveable { mutableStateOf(false) }
-    var activePlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+    var lastSpokenText by remember { mutableStateOf<String?>(null) }
+    var speakJob by remember { mutableStateOf<Job?>(null) }
+    var localTtsReady by remember { mutableStateOf(false) }
+    var showEnableRemoteVoiceDialog by remember { mutableStateOf(false) }
 
-    val textToSpeech = remember {
-        TextToSpeech(context) { status ->
-            ttsReady = status == TextToSpeech.SUCCESS
+    val localTts = remember {
+        TextToSpeech(context.applicationContext) { status ->
+            localTtsReady = status == TextToSpeech.SUCCESS
         }
     }
 
-    DisposableEffect(textToSpeech) {
-        textToSpeech.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) = Unit
-            override fun onDone(utteranceId: String?) = Unit
-            @Deprecated("Deprecated in Android SDK")
-            override fun onError(utteranceId: String?) = Unit
-        })
+    val voicePlayer = remember {
+        RemoteVoicePlayer(context).also { p ->
+            p.setListener(object : RemoteVoicePlayer.Listener {
+                override fun onPlaybackStarted() { voiceStatus = "Renato está falando." }
+                override fun onPlaybackEnded() { voiceStatus = null }
+                override fun onPlaybackError(message: String) {
+                    voiceStatus = "Voz personalizada indisponível: $message"
+                }
+            })
+        }
+    }
+
+    DisposableEffect(voicePlayer) {
         onDispose {
-            textToSpeech.stop()
-            textToSpeech.shutdown()
+            speakJob?.cancel()
+            voicePlayer.release()
+            localTts.stop()
+            localTts.shutdown()
         }
     }
 
-    LaunchedEffect(ttsReady) {
-        if (ttsReady) {
-            textToSpeech.language = Locale.forLanguageTag("pt-BR")
-            textToSpeech.voices
-                ?.bestPortugueseVoice()
-                ?.let { textToSpeech.voice = it }
-            textToSpeech.setSpeechRate(0.88f)
-            textToSpeech.setPitch(1.0f)
+    LaunchedEffect(localTtsReady) {
+        if (localTtsReady) {
+            localTts.language = Locale("pt", "BR")
         }
     }
 
     fun stopSpeech() {
-        activePlayer?.runCatchingStop()
-        activePlayer = null
-        textToSpeech.stop()
+        speakJob?.cancel()
+        voicePlayer.stop()
+        localTts.stop()
     }
 
-    fun playRemoteSpeech(bytes: ByteArray): Boolean {
-        if (bytes.isEmpty()) return false
-        return runCatching {
-            val audioFile = File.createTempFile("titio-renato-", ".mp3", context.cacheDir)
-            audioFile.writeBytes(bytes)
-            val player = MediaPlayer()
-            player.setDataSource(audioFile.absolutePath)
-            player.setOnCompletionListener {
-                it.release()
-                audioFile.delete()
-                if (activePlayer === it) {
-                    activePlayer = null
-                }
-                voiceStatus = null
-            }
-            player.setOnErrorListener { mediaPlayer, _, _ ->
-                mediaPlayer.release()
-                audioFile.delete()
-                if (activePlayer === mediaPlayer) {
-                    activePlayer = null
-                }
-                false
-            }
-            player.prepare()
-            activePlayer = player
-            player.start()
-            true
-        }.getOrDefault(false)
+    fun speakLocal(text: String, reason: String? = null) {
+        if (!localTtsReady) {
+            voiceStatus = reason ?: "TTS local ainda nao esta pronto."
+            return
+        }
+        voiceStatus = reason?.let { "$it Usando voz local." } ?: "Usando voz local."
+        localTts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "renato-local-${System.currentTimeMillis()}")
     }
 
-    fun speakWithDeviceVoice(text: String, flush: Boolean = true) {
-        val chunks = text.toFluidSpeech().chunkForSpeech()
-        if (!ttsReady || chunks.isEmpty()) return
-
-        chunks.forEachIndexed { index, chunk ->
-            textToSpeech.speak(
-                chunk,
-                if (flush && index == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD,
-                Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f) },
-                "tutor-${System.currentTimeMillis()}-$index"
-            )
-            if (index < chunks.lastIndex) {
-                textToSpeech.playSilentUtterance(850, TextToSpeech.QUEUE_ADD, "pause-${System.currentTimeMillis()}-$index")
+    fun speak(text: String, forceRemote: Boolean = false) {
+        if (!voiceResponsesEnabled) return
+        speakJob?.cancel()
+        speakJob = scope.launch {
+            voicePlayer.stop()
+            localTts.stop()
+            voiceStatus = "Sintetizando voz do Renato no servidor..."
+            lastSpokenText = text
+            val settings = voiceSettingsRepository.getSettings()
+            if (!settings.remoteVoiceEnabled && !forceRemote) {
+                Log.i(TAG_TTS, "Remote voice disabled by user settings; using local fallback")
+                if (settings.fallbackToLocalTts) {
+                    speakLocal(text, "Voz remota desativada.")
+                } else {
+                    voiceStatus = "Voz remota desativada nas configuracoes."
+                }
+                return@launch
+            }
+            Log.i(TAG_TTS, "Requesting backend speech (${text.length} chars)")
+            val remoteSpeech = chatApiClient.synthesizeSpeech(text)
+            remoteSpeech.onSuccess { bytes ->
+                Log.i(TAG_TTS, "Received WAV from backend: ${bytes.size} bytes")
+                voicePlayer.play(bytes)
+            }.onFailure { e ->
+                Log.e(TAG_TTS, "Backend speech failed: ${e.message}", e)
+                if (voiceSettingsRepository.getSettings().fallbackToLocalTts) {
+                    speakLocal(text, "Voz personalizada indisponivel.")
+                    return@onFailure
+                }
+                voiceStatus = "Voz personalizada indisponível. ${e.message ?: ""}".trim()
             }
         }
     }
 
-    fun speak(text: String, flush: Boolean = true) {
-        if (!voiceResponsesEnabled) return
-        scope.launch {
-            stopSpeech()
-            voiceStatus = "Titio Renato esta preparando a fala."
-            val remoteSpeech = chatApiClient.synthesizeSpeech(text)
-            val playedRemote = remoteSpeech.getOrNull()?.let { playRemoteSpeech(it) } == true
-            if (playedRemote) {
-                voiceStatus = "Titio Renato esta falando."
-            } else {
-                voiceStatus = "Usando a voz do aparelho."
-                speakWithDeviceVoice(text, flush)
-            }
+    fun retrySpeak() {
+        val text = lastSpokenText ?: return
+        if (!voiceSettingsRepository.getSettings().remoteVoiceEnabled) {
+            showEnableRemoteVoiceDialog = true
+        } else {
+            speak(text, forceRemote = true)
         }
     }
 
@@ -202,7 +232,7 @@ fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
             }
 
             override fun onBeginningOfSpeech() {
-                voiceStatus = "Pode falar sua duvida."
+                voiceStatus = "Pode falar sua dúvida."
             }
 
             override fun onRmsChanged(rmsdB: Float) = Unit
@@ -216,10 +246,10 @@ fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
             override fun onError(error: Int) {
                 isListening = false
                 voiceStatus = when (error) {
-                    SpeechRecognizer.ERROR_NO_MATCH -> "Nao entendi. Tente falar novamente."
-                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Nao ouvi nada. Toque no microfone e tente de novo."
+                    SpeechRecognizer.ERROR_NO_MATCH -> "Não entendi. Tente falar novamente."
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Não ouvi nada. Toque no microfone e tente de novo."
                     SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Permita o microfone para conversar por voz."
-                    else -> "Nao consegui captar o audio agora."
+                    else -> "Não consegui captar o áudio agora."
                 }
             }
 
@@ -231,7 +261,7 @@ fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
                     ?.trim()
 
                 if (spokenText.isNullOrBlank()) {
-                    voiceStatus = "Nao entendi. Tente novamente."
+                    voiceStatus = "Não entendi. Tente novamente."
                 } else {
                     textState = spokenText
                     voiceStatus = "Pergunta reconhecida: $spokenText"
@@ -262,7 +292,7 @@ fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
 
     fun startListening() {
         if (speechRecognizer == null) {
-            voiceStatus = "Nao consegui ouvir neste aparelho."
+            voiceStatus = "Não consegui ouvir neste aparelho."
             return
         }
         stopSpeech()
@@ -270,13 +300,13 @@ fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "pt-BR")
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Fale sua duvida de Analise Dimensional")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Fale sua dúvida de Análise Dimensional")
         }
         runCatching {
             speechRecognizer.startListening(intent)
         }.onFailure {
             isListening = false
-            voiceStatus = "Nao consegui abrir o microfone agora."
+            voiceStatus = "Não consegui abrir o microfone agora."
         }
     }
 
@@ -317,197 +347,443 @@ fun ChatScreen(viewModel: ChatViewModel, onBackClick: () -> Unit) {
         }
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(title = "Titio Renato", onBackClick = onBackClick) }
-    ) { padding ->
-        AppScreenBackground(modifier = Modifier.padding(padding)) {
-            Column(modifier = Modifier.fillMaxSize()) {
+    // -------- Attachment pipeline --------
+    var pendingCameraUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var sheetOpen by remember { mutableStateOf(false) }
+
+    fun kickOff(uri: android.net.Uri, kind: com.example.testes.viewmodel.AttachmentKind) {
+        android.util.Log.i(TAG_ATTACH, "kickOff kind=$kind uri=$uri")
+        scope.launch {
+            try {
+                val file = com.example.testes.data.image.FormulaImageProcessor.compress(context, uri)
+                viewModel.sendAttachment(file, uri.toString(), kind)
+            } catch (e: Throwable) {
+                android.util.Log.e(TAG_ATTACH, "Failed to process attachment: ${e.message}", e)
+                voiceStatus = "Não consegui ler esse anexo: ${e.message ?: "erro desconhecido"}"
+            }
+        }
+    }
+
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val uri = pendingCameraUri
+        pendingCameraUri = null
+        if (ok && uri != null) kickOff(uri, com.example.testes.viewmodel.AttachmentKind.Camera)
+    }
+    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) kickOff(uri, com.example.testes.viewmodel.AttachmentKind.Gallery)
+    }
+    val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val jpgUri = renderPdfFirstPageToJpgUri(context, uri)
+                    if (jpgUri != null) kickOff(jpgUri, com.example.testes.viewmodel.AttachmentKind.Pdf)
+                    else voiceStatus = "Não consegui abrir esse PDF."
+                } catch (e: Throwable) {
+                    android.util.Log.e(TAG_ATTACH, "PDF failed: ${e.message}", e)
+                    voiceStatus = "PDF inválido: ${e.message ?: ""}".trim()
+                }
+            }
+        }
+    }
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            val uri = createCameraUri(context)
+            pendingCameraUri = uri
+            cameraLauncher.launch(uri)
+        } else {
+            voiceStatus = "Permita a câmera para tirar foto."
+        }
+    }
+    fun openCamera() {
+        val permission = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
+        if (permission == PackageManager.PERMISSION_GRANTED) {
+            val uri = createCameraUri(context)
+            pendingCameraUri = uri
+            cameraLauncher.launch(uri)
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    LaunchedEffect(initialAttachmentRequest) {
+        if (initialAttachmentRequest == AttachmentRequest.CameraNow) openCamera()
+    }
+
+    // -------- UI --------
+    Box(modifier = Modifier.fillMaxSize()) {
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(com.example.testes.R.drawable.chat_space_bg),
+            contentDescription = null,
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+        Box(modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.82f)))
+
+        Scaffold(
+            containerColor = androidx.compose.ui.graphics.Color.Transparent,
+            topBar = {
+                androidx.compose.material3.CenterAlignedTopAppBar(
+                    title = { Text("Renato", style = MaterialTheme.typography.titleMedium) },
+                    navigationIcon = {
+                        IconButton(onClick = onBackClick) {
+                            Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar")
+                        }
+                    },
+                    colors = androidx.compose.material3.TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = androidx.compose.ui.graphics.Color.Transparent
+                    )
+                )
+            }
+        ) { padding ->
+            Column(modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier
                         .weight(1f)
-                        .padding(horizontal = 16.dp),
-                    reverseLayout = false
+                        .padding(horizontal = 12.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    item {
-                        androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(top = 12.dp))
-                        AppHeroPanel(
-                            title = "Converse com o titio Renato",
-                            subtitle = "Pergunte sobre formulas, unidades e dimensoes."
-                        )
-                        androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(top = 12.dp))
+                    if (messages.size <= 1) {
+                        item {
+                            Column(modifier = Modifier.padding(vertical = 12.dp)) {
+                                Text(
+                                    "Como posso ajudar?",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Pergunte, fale, tire foto, envie imagem ou PDF.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(Modifier.height(16.dp))
+                                AvatarScene(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(220.dp)
+                                )
+                                Spacer(Modifier.height(16.dp))
+                                suggestedQuestions.take(4).chunked(2).forEach { row ->
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                                        row.forEach { suggestion ->
+                                            AssistChip(
+                                                onClick = { viewModel.sendMessage(suggestion, source = "sugestao_chat") },
+                                                label = { Text(suggestion, maxLines = 2, style = MaterialTheme.typography.labelMedium) },
+                                                enabled = !isSending,
+                                                modifier = Modifier.weight(1f),
+                                                colors = androidx.compose.material3.AssistChipDefaults.assistChipColors(
+                                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.76f),
+                                                    labelColor = MaterialTheme.colorScheme.onSurface
+                                                ),
+                                                border = androidx.compose.foundation.BorderStroke(
+                                                    1.dp,
+                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)
+                                                )
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
-                    items(messages) { message ->
-                        ChatMessageBubble(
-                            message = message.text,
-                            isFromUser = message.isFromUser
+                    items(messages, key = { it.id }) { message ->
+                        com.example.testes.ui.components.RenatoMessageBubble(
+                            message = message.copy(text = message.text.asRenatoUiText()),
+                            onCopy = { clipboardManager.setText(AnnotatedString(it)) },
+                            onShare = { txt ->
+                                val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(android.content.Intent.EXTRA_TEXT, txt)
+                                }
+                                context.startActivity(android.content.Intent.createChooser(intent, "Compartilhar"))
+                            },
+                            onSave = { txt ->
+                                clipboardManager.setText(AnnotatedString(txt))
+                                voiceStatus = "Resposta copiada para a área de transferência."
+                            },
+                            onOpenLesson = onOpenLesson
                         )
                     }
                 }
 
                 (voiceStatus ?: statusMessage)?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (isListening) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(text = "Escutar o titio Renato", style = MaterialTheme.typography.bodyMedium)
-                    Switch(
-                        checked = voiceResponsesEnabled,
-                        onCheckedChange = { enabled ->
-                            voiceResponsesEnabled = enabled
-                            voiceStatus = if (enabled) {
-                                "Voz do tutor ativada."
-                            } else {
-                                "Voz do tutor desativada."
+                    val voiceUnavailable = voiceStatus.isVoiceUnavailableStatus()
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = it.asRenatoUiText(),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = when {
+                                voiceUnavailable -> MaterialTheme.colorScheme.error
+                                isListening -> MaterialTheme.colorScheme.primary
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                        when {
+                            voiceUnavailable && lastSpokenText != null -> {
+                                TextButton(onClick = { retrySpeak() }) { Text("Tentar voz") }
+                            }
+                            lastFailedPrompt != null -> {
+                                TextButton(onClick = { viewModel.retryLastFailed() }, enabled = !isSending) {
+                                    Text("Tentar de novo")
+                                }
                             }
                         }
-                    )
+                    }
                 }
 
-                Row(
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
-                        .fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    VoiceButton(onClick = { requestVoiceInput() }, isListening = isListening)
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    OutlinedTextField(
-                        value = textState,
-                        onValueChange = { textState = it },
-                        modifier = Modifier.weight(1f),
-                        enabled = !isSending,
-                        placeholder = { Text(if (isListening) "Ouvindo..." else "Pergunte sobre uma formula...") },
-                        shape = MaterialTheme.shapes.medium
-                    )
-
-                    Spacer(modifier = Modifier.width(4.dp))
-
-                    IconButton(
-                        onClick = {
-                            messages.lastOrNull { !it.isFromUser }?.let { speak(it.text) }
-                        }
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Ouvir ultima resposta")
-                    }
-
-                    IconButton(
-                        enabled = !isSending && textState.isNotBlank(),
-                        onClick = {
+                // Composer
+                ChatComposer(
+                    textState = textState,
+                    onTextChange = { textState = it },
+                    isSending = isSending,
+                    isListening = isListening,
+                    voiceEnabled = voiceResponsesEnabled,
+                    onToggleVoice = {
+                        voiceResponsesEnabled = !voiceResponsesEnabled
+                        voiceStatus = if (voiceResponsesEnabled) "Voz ativada" else "Voz desativada"
+                    },
+                    onMic = { requestVoiceInput() },
+                    onSend = {
+                        if (textState.isNotBlank() && !isSending) {
                             viewModel.sendMessage(textState)
                             textState = ""
                         }
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Enviar",
-                            tint = if (isSending) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary
-                        )
+                    },
+                    onOpenAttachmentSheet = { sheetOpen = true }
+                )
+            }
+        }
+    }
+
+    if (sheetOpen) {
+        AttachmentBottomSheet(
+            onDismiss = { sheetOpen = false },
+            onPickCamera = { sheetOpen = false; openCamera() },
+            onPickGallery = { sheetOpen = false; galleryLauncher.launch("image/*") },
+            onPickPdf = { sheetOpen = false; pdfLauncher.launch("application/pdf") }
+        )
+    }
+
+    if (showEnableRemoteVoiceDialog) {
+        AlertDialog(
+            onDismissRequest = { showEnableRemoteVoiceDialog = false },
+            title = { Text("Ativar voz remota?") },
+            text = { Text("A voz personalizada do Renato esta desligada. Voce pode ativar agora ou revisar em Configuracoes.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showEnableRemoteVoiceDialog = false
+                        voiceSettingsRepository.setRemoteVoiceEnabled(true)
+                        retrySpeak()
                     }
+                ) { Text("Ativar e tentar") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { showEnableRemoteVoiceDialog = false }) {
+                        Text("Agora nao")
+                    }
+                    TextButton(
+                        onClick = {
+                            showEnableRemoteVoiceDialog = false
+                            onOpenSettings()
+                        }
+                    ) { Text("Configuracoes") }
                 }
             }
-        }
+        )
     }
 }
 
-private fun String.toFluidSpeech(): String {
-    val answerOnly = substringAfter("Resposta simulada:", this)
-    return answerOnly
-        .replace(Regex("(?is)Pergunta recebida:.*?Resposta simulada:"), "")
-        .replace(Regex("(?im)^\\s*IA F[ií]sica\\s*-\\s*MODO SIMULADO\\s*$"), "")
-        .replace(Regex("(?im)^\\s*(N[ií]vel do aluno|Assunto|Pergunta recebida|Pergunta):.*$"), "")
-        .replace(Regex("(?im)^\\s*\\d+\\.\\s*"), "")
-        .replace(Regex("(?m)^\\s*[-•]\\s*"), "")
-        .replace("Dados do problema:", "Vamos pelos dados do problema.")
-        .replace("Fórmula usada:", "A formula usada e:")
-        .replace("Formula usada:", "A formula usada e:")
-        .replace("Trabalho:", "Calculando o trabalho:")
-        .replace("Potência:", "Calculando a potencia:")
-        .replace("Potencia:", "Calculando a potencia:")
-        .replace("Observação:", "Observacao:")
-        .replace("Observacao:", "Observacao:")
-        .replace("P = W / t", "Potencia e igual ao trabalho dividido pelo tempo.")
-        .replace("W = F · d", "Trabalho e igual a forca vezes a distancia.")
-        .replace(Regex("\\b([0-9]+(?:[,.][0-9]+)?)\\s*N\\b"), "$1 newtons")
-        .replace(Regex("\\b([0-9]+(?:[,.][0-9]+)?)\\s*J\\b"), "$1 joules")
-        .replace(Regex("\\b([0-9]+(?:[,.][0-9]+)?)\\s*W\\b"), "$1 watts")
-        .replace(Regex("\\bkm/h\\b"), "quilometros por hora")
-        .replace(Regex("\\bm/s\\b"), "metros por segundo")
-        .replace("v^2", "v ao quadrado")
-        .replace("[M]", " dimensao massa ")
-        .replace("[L]", " dimensao comprimento ")
-        .replace("[T]", " dimensao tempo ")
-        .replace("^-1", " elevado a menos um ")
-        .replace("^-2", " elevado a menos dois ")
-        .replace("=", " igual a ")
-        .replace("/", " dividido por ")
-        .replace("·", " vezes ")
-        .replace("^2", " ao quadrado ")
-        .replace(":", ". ")
-        .replace(";", ". ")
-        .replace("*", "")
-        .replace(Regex("\\s+"), " ")
-        .trim()
+private fun String?.isVoiceUnavailableStatus(): Boolean {
+    val normalized = this
+        ?.lowercase()
+        ?.replace("í", "i")
+        ?.replace("Ã­", "i")
+        ?: return false
+    return normalized.contains("voz") && normalized.contains("indisponivel")
 }
 
-private fun Set<Voice>.bestPortugueseVoice(): Voice? {
-    return filter { voice ->
-        voice.locale.language == "pt"
-    }.sortedWith(
-        compareByDescending<Voice> { if (it.locale.country == "BR") 1 else 0 }
-            .thenByDescending { it.quality }
-            .thenBy { if (it.isNetworkConnectionRequired) 1 else 0 }
-            .thenBy { it.latency }
-    ).firstOrNull()
+private fun String.asRenatoUiText(): String {
+    return replace("titio Renato", "Renato")
+        .replace("Titio Renato", "Renato")
+        .replace("formula", "fórmula")
+        .replace("duvida", "dúvida")
+        .replace("Analise Dimensional", "Análise Dimensional")
 }
 
-private fun String.chunkForSpeech(maxLength: Int = 185): List<String> {
-    val sentences = split(Regex("(?<=[.!?])\\s+|(?<=,)\\s+(?=e |mas |entao |agora )"))
-    val chunks = mutableListOf<String>()
-    var current = StringBuilder()
-
-    sentences.forEach { sentence ->
-        if (current.isNotEmpty() && current.length + sentence.length + 1 > maxLength) {
-            chunks += current.toString().trim()
-            current = StringBuilder()
-        }
-        if (sentence.length > maxLength) {
-            if (current.isNotEmpty()) {
-                chunks += current.toString().trim()
-                current = StringBuilder()
+@androidx.compose.runtime.Composable
+private fun ChatComposer(
+    textState: String,
+    onTextChange: (String) -> Unit,
+    isSending: Boolean,
+    isListening: Boolean,
+    voiceEnabled: Boolean,
+    onToggleVoice: () -> Unit,
+    onMic: () -> Unit,
+    onSend: () -> Unit,
+    onOpenAttachmentSheet: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f)),
+        tonalElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onOpenAttachmentSheet, enabled = !isSending) {
+                Icon(androidx.compose.material.icons.Icons.Default.Add, contentDescription = "Anexo", tint = MaterialTheme.colorScheme.primary)
             }
-            sentence.chunked(maxLength).forEach { chunks += it.trim() }
-        } else {
-            if (current.isNotEmpty()) current.append(' ')
-            current.append(sentence)
+            androidx.compose.foundation.text.BasicTextField(
+                value = textState,
+                onValueChange = onTextChange,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 4.dp, vertical = 12.dp),
+                enabled = !isSending,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                decorationBox = { inner ->
+                    if (textState.isEmpty()) {
+                        Text(
+                            if (isListening) "Ouvindo..." else "Pergunte ou envie um exercício",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    inner()
+                }
+            )
+            IconButton(onClick = onMic) {
+                Icon(
+                    if (isListening) androidx.compose.material.icons.Icons.Default.MicOff else androidx.compose.material.icons.Icons.Default.Mic,
+                    contentDescription = "Falar",
+                    tint = if (isListening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary
+                )
+            }
+            IconButton(onClick = onToggleVoice) {
+                Icon(
+                    if (voiceEnabled) androidx.compose.material.icons.Icons.AutoMirrored.Filled.VolumeUp
+                    else androidx.compose.material.icons.Icons.AutoMirrored.Filled.VolumeOff,
+                    contentDescription = if (voiceEnabled) "Desativar voz" else "Ativar voz",
+                    tint = if (voiceEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            androidx.compose.material3.FloatingActionButton(
+                onClick = onSend,
+                modifier = Modifier.size(44.dp),
+                shape = androidx.compose.foundation.shape.CircleShape,
+                containerColor = if (textState.isNotBlank() && !isSending) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                elevation = androidx.compose.material3.FloatingActionButtonDefaults.elevation(defaultElevation = 0.dp, pressedElevation = 0.dp)
+            ) {
+                Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.Send, contentDescription = "Enviar", modifier = Modifier.size(20.dp))
+            }
         }
     }
-
-    if (current.isNotEmpty()) chunks += current.toString().trim()
-    return chunks.filter { it.isNotBlank() }
 }
 
-private fun String.chunkForHumanSpeech(maxLength: Int = 520): List<String> {
-    return chunkForSpeech(maxLength).filter { it.isNotBlank() }
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@androidx.compose.runtime.Composable
+private fun AttachmentBottomSheet(
+    onDismiss: () -> Unit,
+    onPickCamera: () -> Unit,
+    onPickGallery: () -> Unit,
+    onPickPdf: () -> Unit
+) {
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Column(modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(bottom = 16.dp)) {
+            Text("Enviar para Renato", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+            Spacer(Modifier.height(8.dp))
+            AttachmentOption("📷", "Tirar foto", "Câmera do aparelho", onPickCamera)
+            AttachmentOption("🖼", "Escolher imagem", "Galeria do aparelho", onPickGallery)
+            AttachmentOption("📄", "Enviar PDF", "Primeira página do documento", onPickPdf)
+        }
+    }
 }
 
-private fun MediaPlayer.runCatchingStop() {
-    runCatching {
-        stop()
-        release()
+@androidx.compose.runtime.Composable
+private fun AttachmentOption(icon: String, title: String, subtitle: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(icon, modifier = Modifier.padding(end = 14.dp), style = MaterialTheme.typography.titleLarge)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+private fun createCameraUri(context: android.content.Context): android.net.Uri {
+    val dir = java.io.File(context.cacheDir, "chat_photos").apply { mkdirs() }
+    val file = java.io.File.createTempFile("photo-", ".jpg", dir)
+    return androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+}
+
+/**
+ * Renderiza a primeira página de um PDF (URI) em JPG temp e retorna o Uri do JPG.
+ * Usa android.graphics.pdf.PdfRenderer nativo — sem dep extra.
+ */
+private suspend fun renderPdfFirstPageToJpgUri(
+    context: android.content.Context,
+    pdfUri: android.net.Uri
+): android.net.Uri? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    val resolver = context.contentResolver
+    val tmp = java.io.File.createTempFile("pdf-", ".pdf", context.cacheDir)
+    resolver.openInputStream(pdfUri)?.use { input ->
+        tmp.outputStream().use { out -> input.copyTo(out) }
+    } ?: return@withContext null
+    val pfd = android.os.ParcelFileDescriptor.open(tmp, android.os.ParcelFileDescriptor.MODE_READ_ONLY)
+    val renderer = android.graphics.pdf.PdfRenderer(pfd)
+    try {
+        if (renderer.pageCount < 1) return@withContext null
+        val page = renderer.openPage(0)
+        val scale = 2  // 2x ~ 144dpi para OCR decente
+        val bitmap = android.graphics.Bitmap.createBitmap(page.width * scale, page.height * scale, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        canvas.drawColor(android.graphics.Color.WHITE)
+        page.render(bitmap, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+        page.close()
+        val outDir = java.io.File(context.cacheDir, "chat_photos").apply { mkdirs() }
+        val outFile = java.io.File.createTempFile("pdf-page-", ".jpg", outDir)
+        outFile.outputStream().use { stream ->
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 88, stream)
+        }
+        bitmap.recycle()
+        androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", outFile)
+    } finally {
+        renderer.close()
+        pfd.close()
+        tmp.delete()
     }
 }

@@ -46,7 +46,7 @@ fun ModuleDetailScreen(
             when {
                 isLoading && lessons.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 errorMessage != null && lessons.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Nao consegui mostrar as aulas agora.")
+                    Text("Não consegui mostrar as aulas agora.")
                 }
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -95,12 +95,12 @@ private fun LessonListCard(index: Int, lesson: Lesson, onClick: () -> Unit) {
             Spacer(modifier = Modifier.width(10.dp))
             Surface(
                 shape = MaterialTheme.shapes.medium,
-                color = if (lesson.isCompleted) Color(0xFFE3F7E8) else MaterialTheme.colorScheme.primaryContainer
+                color = if (lesson.isCompleted) MaterialTheme.colorScheme.tertiary.copy(alpha = 0.16f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
             ) {
                 Icon(
                     if (lesson.isCompleted) Icons.Default.CheckCircle else Icons.Default.PlayArrow,
                     contentDescription = null,
-                    tint = if (lesson.isCompleted) Color(0xFF247A3D) else MaterialTheme.colorScheme.primary,
+                    tint = if (lesson.isCompleted) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(9.dp).size(22.dp)
                 )
             }

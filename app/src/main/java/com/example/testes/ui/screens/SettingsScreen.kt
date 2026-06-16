@@ -5,6 +5,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
@@ -14,9 +15,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.testes.data.api.ContentApiClient
 import com.example.testes.data.api.SessionManager
+import com.example.testes.data.voice.VoiceSettingsRepository
 import com.example.testes.model.User
 import com.example.testes.ui.components.AppHeroPanel
 import com.example.testes.ui.components.AppScreenBackground
@@ -29,6 +32,9 @@ fun SettingsScreen(
     onAccountDeleted: () -> Unit,
     contentApiClient: ContentApiClient = ContentApiClient()
 ) {
+    val context = LocalContext.current
+    val voiceSettingsRepository = remember { VoiceSettingsRepository(context) }
+    var voiceSettings by remember { mutableStateOf(voiceSettingsRepository.getSettings()) }
     var user by remember { mutableStateOf<User?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var isSaving by remember { mutableStateOf(false) }
@@ -36,6 +42,7 @@ fun SettingsScreen(
     var successMessage by remember { mutableStateOf<String?>(null) }
     var editField by remember { mutableStateOf<EditField?>(null) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showSupportDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     fun save(updated: User) {
@@ -68,7 +75,7 @@ fun SettingsScreen(
                 }
                 successMessage = "Tudo salvo."
             }.onFailure {
-                errorMessage = "Nao consegui salvar agora."
+                errorMessage = "Não consegui salvar agora."
             }
             isSaving = false
         }
@@ -81,7 +88,7 @@ fun SettingsScreen(
             successMessage = null
             contentApiClient.deleteCurrentUser()
                 .onSuccess { onAccountDeleted() }
-                .onFailure { errorMessage = "Nao consegui excluir sua conta agora." }
+                .onFailure { errorMessage = "Não consegui excluir sua conta agora." }
             isSaving = false
         }
     }
@@ -92,13 +99,13 @@ fun SettingsScreen(
                 user = it
                 errorMessage = null
             }
-            .onFailure { errorMessage = "Nao consegui mostrar suas configuracoes agora." }
+            .onFailure { errorMessage = "Não consegui mostrar suas configurações agora." }
         isLoading = false
     }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(title = "Configuracoes", onBackClick = onBackClick) }
+        topBar = { AppTopBar(title = "Configurações", onBackClick = onBackClick) }
     ) { padding ->
         AppScreenBackground(modifier = Modifier.padding(padding)) {
         Column(
@@ -112,7 +119,7 @@ fun SettingsScreen(
                 isLoading -> Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
-                user == null -> Text(errorMessage ?: "Nao foi possivel carregar suas configuracoes.")
+                user == null -> Text(errorMessage ?: "Não foi possível carregar suas configurações.")
                 else -> {
                     val currentUser = user!!
                     AppHeroPanel(
@@ -132,7 +139,7 @@ fun SettingsScreen(
                                 save(currentUser.copy(email = value.trim()))
                             }
                         }
-                        SettingsItem("Telefone", currentUser.phone ?: "Nao informado", Icons.Default.Phone) {
+                        SettingsItem("Telefone", currentUser.phone ?: "Não informado", Icons.Default.Phone) {
                             editField = EditField("Telefone", currentUser.phone.orEmpty(), true) { value ->
                                 save(currentUser.copy(phone = value.trim().ifBlank { null }))
                             }
@@ -157,6 +164,36 @@ fun SettingsScreen(
                             enabled = !isSaving,
                             onCheckedChange = { save(currentUser.copy(notificationsEnabled = it)) }
                         )
+                        SettingsSwitchItem(
+                            label = "Usar voz remota personalizada",
+                            description = "Tenta gerar a voz do Renato pelo backend antes do TTS local.",
+                            checked = voiceSettings.remoteVoiceEnabled,
+                            enabled = !isSaving,
+                            onCheckedChange = {
+                                voiceSettingsRepository.setRemoteVoiceEnabled(it)
+                                voiceSettings = voiceSettingsRepository.getSettings()
+                                successMessage = if (it) "Voz remota ativada." else "Voz remota desativada."
+                            }
+                        )
+                        SettingsSwitchItem(
+                            label = "Fallback para voz local",
+                            description = "Usa o TTS do Android quando a voz remota falhar.",
+                            checked = voiceSettings.fallbackToLocalTts,
+                            enabled = !isSaving,
+                            onCheckedChange = {
+                                voiceSettingsRepository.setFallbackToLocalTts(it)
+                                voiceSettings = voiceSettingsRepository.getSettings()
+                                successMessage = "Preferencia de voz salva."
+                            }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    SettingsGroup(title = "Ajuda") {
+                        SettingsItem("Suporte", "Contato e informações de atendimento", Icons.Default.Info) {
+                            showSupportDialog = true
+                        }
                     }
 
                     if (isSaving) {
@@ -221,6 +258,10 @@ fun SettingsScreen(
                 }
             }
         )
+    }
+
+    if (showSupportDialog) {
+        ContactSupportDialog(onDismiss = { showSupportDialog = false })
     }
 }
 

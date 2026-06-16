@@ -44,9 +44,30 @@ __pycache__/
 *.pyd
 .env
 *.env
+backend/.venv/
+backend/.pytest_cache/
 backend/data/
 backend/*.sqlite3
 backend/uploads/
+backend/checkpoints_v2/
+backend/nltk_data/
+backend/tts/
+backend/voices/
+backend/tmp/*
+!backend/tmp/.gitkeep
+backend/uvicorn.pid
+backend/uvicorn.*.log
+backend/*.log
+
+# Audio assets (geram grande peso; subir só sob demanda)
+voices/*.wav
+IA-física/IA/voices/*.wav
 
 # VS Code
 .vscode/
+
+# Claude / IDE local
+.agents/
+.kotlin/
+.claude/
+plans/

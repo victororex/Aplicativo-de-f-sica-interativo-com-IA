@@ -1,6 +1,7 @@
 package com.example.testes.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -9,6 +10,7 @@ import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.testes.data.api.SessionManager
+import com.example.testes.data.local.MissionsRepository
 import com.example.testes.ui.screens.*
 import com.example.testes.viewmodel.*
 
@@ -18,6 +20,9 @@ fun SetupNavGraph(
     modifier: Modifier = Modifier,
     startDestination: String = Screen.Splash.route
 ) {
+    val context = LocalContext.current
+    val onboardingPrefs = context.getSharedPreferences("fisica_interativa_onboarding", android.content.Context.MODE_PRIVATE)
+
     NavHost(
         navController = navController,
         startDestination = startDestination,
@@ -25,7 +30,12 @@ fun SetupNavGraph(
     ) {
         composable(Screen.Splash.route) {
             SplashScreen(onTimeout = {
-                navController.navigate(Screen.Onboarding.route) {
+                val destination = when {
+                    SessionManager.isLoggedIn -> Screen.Home.route
+                    onboardingPrefs.getBoolean("seen", false) -> Screen.Login.route
+                    else -> Screen.Onboarding.route
+                }
+                navController.navigate(destination) {
                     popUpTo(Screen.Splash.route) { inclusive = true }
                 }
             })
@@ -34,6 +44,7 @@ fun SetupNavGraph(
         composable(Screen.Onboarding.route) {
             OnboardingScreen(
                 onFinished = {
+                    onboardingPrefs.edit().putBoolean("seen", true).apply()
                     navController.navigate(Screen.Login.route) {
                         popUpTo(Screen.Onboarding.route) { inclusive = true }
                     }
@@ -70,10 +81,17 @@ fun SetupNavGraph(
             val homeViewModel: HomeViewModel = viewModel()
             HomeScreen(
                 viewModel = homeViewModel,
-                onDailyChallenge = { navController.navigate(Screen.DailyChallenge.route) },
-                onStudyCampaign = { navController.navigate(Screen.StudyCampaign.route) },
-                onChatDoubt = { navController.navigate(Screen.Chat.route) },
-                onImprovementStats = { navController.navigate(Screen.ImprovementStats.route) }
+                onDailyChallenge = { navController.navigate(Screen.DailyChallengesList.route) { launchSingleTop = true } },
+                onStudyCampaign = { navController.navigate(Screen.StudyCampaign.route) { launchSingleTop = true } },
+                onChatDoubt = { navController.navigate(Screen.Chat.createRoute()) { launchSingleTop = true } },
+                onImprovementStats = { navController.navigate(Screen.ImprovementStats.route) { launchSingleTop = true } },
+                onMissions = {
+                    navController.navigate(Screen.StudyCampaign.route) {
+                        popUpTo(Screen.Home.route) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
             )
         }
 
@@ -86,11 +104,62 @@ fun SetupNavGraph(
         }
 
         composable(Screen.StudyCampaign.route) {
-            StudyCampaignScreen(
-                onBackClick = { navController.popBackStack() },
-                onSubjectClick = { subjectId ->
-                    navController.navigate(Screen.ModuleDetail.createRoute(subjectId))
+            GalaxyScreenRoute(
+                onBack = { navController.popBackStack() },
+                onPlanetSelected = { planetId ->
+                    navController.navigate(Screen.PlanetMap.createRoute(planetId)) { launchSingleTop = true }
                 }
+            )
+        }
+
+        composable(
+            route = Screen.PlanetMap.route,
+            arguments = listOf(navArgument("planetId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val planetId = backStackEntry.arguments?.getString("planetId").orEmpty()
+            PlanetMapScreenRoute(
+                planetId = planetId,
+                onBack = { navController.popBackStack() },
+                onMissionSelected = { node, planet ->
+                    val route = if (planet.id == MissionsRepository.DIMENSIONAL_SUBJECT_ID)
+                        Screen.MissionDetail.createRoute(node.id)
+                    else
+                        Screen.ModuleDetail.createRoute(node.id)
+                    navController.navigate(route) { launchSingleTop = true }
+                }
+            )
+        }
+
+        composable(
+            route = Screen.MissionDetail.route,
+            arguments = listOf(navArgument("missionId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val missionId = backStackEntry.arguments?.getString("missionId").orEmpty()
+            MissionDetailScreenRoute(
+                missionId = missionId,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.DailyChallengesList.route) {
+            DailyChallengesScreenRoute(
+                onBack = { navController.popBackStack() },
+                onInstanceSelected = { instanceId ->
+                    navController.navigate(Screen.DailyChallengeRun.createRoute(instanceId)) {
+                        launchSingleTop = true
+                    }
+                }
+            )
+        }
+
+        composable(
+            route = Screen.DailyChallengeRun.route,
+            arguments = listOf(navArgument("instanceId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val instanceId = backStackEntry.arguments?.getString("instanceId").orEmpty()
+            DailyChallengeRunScreenRoute(
+                instanceId = instanceId,
+                onBack = { navController.popBackStack() }
             )
         }
 
@@ -129,15 +198,29 @@ fun SetupNavGraph(
             LessonDetailScreen(
                 lessonId = lessonId,
                 onBackClick = { navController.popBackStack() },
-                onStartChat = { navController.navigate(Screen.Chat.route) }
+                onStartChat = { navController.navigate(Screen.Chat.createRoute()) }
             )
         }
         
-        composable(Screen.Chat.route) {
+        composable(
+            route = Screen.Chat.route,
+            arguments = listOf(navArgument("action") {
+                type = NavType.StringType
+                nullable = true
+                defaultValue = null
+            })
+        ) { backStackEntry ->
+            val action = backStackEntry.arguments?.getString("action")
+            val initialRequest = if (action == "camera") AttachmentRequest.CameraNow else null
             val chatViewModel: ChatViewModel = viewModel()
             ChatScreen(
                 viewModel = chatViewModel,
-                onBackClick = { navController.popBackStack() }
+                onBackClick = { navController.popBackStack() },
+                onOpenLesson = { lessonId ->
+                    navController.navigate(Screen.LessonDetail.createRoute(lessonId))
+                },
+                onOpenSettings = { navController.navigate(Screen.Settings.route) },
+                initialAttachmentRequest = initialRequest
             )
         }
         
