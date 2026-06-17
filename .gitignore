@@ -46,13 +46,13 @@ __pycache__/
 *.env
 backend/.venv/
 backend/.pytest_cache/
+# checkpoint.pth (125 MB) é baixado automaticamente por
+# backend/scripts/download_openvoice_models.py — fora do limite do GitHub
+backend/checkpoints_v2/converter/checkpoint.pth
 backend/data/
 backend/*.sqlite3
 backend/uploads/
-backend/checkpoints_v2/
 backend/nltk_data/
-backend/tts/
-backend/voices/
 backend/tmp/*
 !backend/tmp/.gitkeep
 backend/uvicorn.pid
@@ -60,8 +60,6 @@ backend/uvicorn.*.log
 backend/*.log
 
 # Audio assets (geram grande peso; subir só sob demanda)
-voices/*.wav
-IA-física/IA/voices/*.wav
 
 # VS Code
 .vscode/
