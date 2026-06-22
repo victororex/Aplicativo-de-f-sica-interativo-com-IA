@@ -112,6 +112,25 @@ class MissionViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun recordMissionAnswer(
+        mission: MissionDetail,
+        questionId: String,
+        isCorrect: Boolean,
+        responseTimeSeconds: Int
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                LocalBackend.recordTrackMissionAnswer(
+                    SessionManager.accessToken,
+                    questionId,
+                    mission.title,
+                    isCorrect,
+                    responseTimeSeconds
+                )
+            }
+        }
+    }
+
     /** Maior índice de missão atualmente liberado (CURRENT ou COMPLETED) na trilha. 0 se nada. */
     fun getHighestMissionUnlocked(subjectId: String): Int {
         val track = dimensionalTrack ?: return 0

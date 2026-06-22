@@ -7,6 +7,7 @@ o formato pelo conteúdo, então não precisa ser WAV.
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import logging
 import time
 from dataclasses import dataclass
@@ -41,10 +42,20 @@ class EdgeTTSClient:
 
     def synthesize(self, text: str) -> EdgeTTSResult:
         started = time.perf_counter()
-        audio = asyncio.run(self._render(text))
+        audio = self._run_render(text)
         elapsed = time.perf_counter() - started
         logger.info("edge-tts synth voice=%s bytes=%d in %.2fs", self.voice, len(audio), elapsed)
         return EdgeTTSResult(audio=audio, voice=self.voice, elapsed_seconds=elapsed)
+
+    def _run_render(self, text: str) -> bytes:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self._render(text))
+
+        # FastAPI lifespan already owns this thread's event loop.
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            return executor.submit(lambda: asyncio.run(self._render(text))).result()
 
     async def _render(self, text: str) -> bytes:
         communicate = edge_tts.Communicate(text, self.voice, rate=self.rate, pitch=self.pitch)

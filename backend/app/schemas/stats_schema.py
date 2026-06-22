@@ -41,6 +41,7 @@ class EvolutionPointResponse(BaseModel):
     accuracy_rate: int
     study_seconds: int
     questions: int
+    activities: int = 0
 
 
 class TopicPerformanceResponse(BaseModel):
@@ -78,6 +79,9 @@ class AdaptiveProfileResponse(BaseModel):
     next_topic: str
     review_topics: list[str]
     suggested_questions: list[str]
+    fuzzy_score: int = Field(ge=0, le=100)
+    learning_velocity: str
+    ignored_topics: list[str]
 
 
 class LearningDashboardResponse(BaseModel):
@@ -100,3 +104,8 @@ class LearningDashboardResponse(BaseModel):
     performance_history: list[PerformanceHistoryResponse]
     recommendations: list[RecommendationResponse]
     adaptive_profile: AdaptiveProfileResponse
+    ai_interactions: int
+    ocr_uses: int
+    voice_uses: int
+    missions_completed: int
+    active_study_days: int

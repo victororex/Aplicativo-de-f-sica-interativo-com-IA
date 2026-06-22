@@ -33,9 +33,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,6 +83,9 @@ fun MissionDetailScreenRoute(
                 }
                 else -> MissionDetailScreen(
                     mission = mission!!,
+                    onAnswer = { questionId, correct, elapsed ->
+                        viewModel.recordMissionAnswer(mission!!, questionId, correct, elapsed)
+                    },
                     onCompleted = { viewModel.markMissionCompleted(missionId); onBack() }
                 )
             }
@@ -92,6 +96,7 @@ fun MissionDetailScreenRoute(
 @Composable
 fun MissionDetailScreen(
     mission: MissionDetail,
+    onAnswer: (String, Boolean, Int) -> Unit,
     onCompleted: () -> Unit
 ) {
     val totalQuestions = mission.questions.size
@@ -109,7 +114,7 @@ fun MissionDetailScreen(
         if (mission.objectives.isNotEmpty()) {
             item(key = "objectives") { ObjectivesCard(mission.objectives) }
         }
-        items(mission.contentBlocks.size) { idx ->
+        items(mission.contentBlocks.size, key = { idx -> "content-${mission.contentBlocks[idx].hashCode()}" }) { idx ->
             ContentBlockCard(mission.contentBlocks[idx])
         }
         if (mission.questions.isNotEmpty()) {
@@ -123,10 +128,13 @@ fun MissionDetailScreen(
                 )
             }
         }
-        items(mission.questions.size) { idx ->
+        items(mission.questions.size, key = { idx -> mission.questions[idx].id }) { idx ->
             QuestionCard(
                 index = idx + 1,
                 question = mission.questions[idx],
+                onAnswered = { correct, elapsed ->
+                    onAnswer(mission.questions[idx].id, correct, elapsed)
+                },
                 onCorrect = { correctCount.value += 1 }
             )
         }
@@ -231,10 +239,19 @@ private fun ContentBlockCard(block: MissionContentBlock) {
 private fun QuestionCard(
     index: Int,
     question: MissionQuestion,
+    onAnswered: (Boolean, Int) -> Unit,
     onCorrect: () -> Unit
 ) {
-    var answered by remember(question.id) { mutableStateOf(false) }
-    var correct by remember(question.id) { mutableStateOf(false) }
+    var answered by rememberSaveable(question.id) { mutableStateOf(false) }
+    var correct by rememberSaveable(question.id) { mutableStateOf(false) }
+    val startedAt by rememberSaveable(question.id) { mutableLongStateOf(System.currentTimeMillis()) }
+
+    fun saveAnswer(answerCorrect: Boolean) {
+        val elapsed = ((System.currentTimeMillis() - startedAt) / 1000L)
+            .coerceAtLeast(1L)
+            .toInt()
+        onAnswered(answerCorrect, elapsed)
+    }
 
     Card {
         Column(Modifier.padding(Spacing.md)) {
@@ -260,6 +277,7 @@ private fun QuestionCard(
                         if (!answered) {
                             answered = true
                             correct = i == question.correctIndex
+                            saveAnswer(correct)
                             if (correct) onCorrect()
                         }
                     }
@@ -272,6 +290,7 @@ private fun QuestionCard(
                         if (!answered) {
                             answered = true
                             correct = (i == 0) == question.correct
+                            saveAnswer(correct)
                             if (correct) onCorrect()
                         }
                     }
@@ -282,6 +301,7 @@ private fun QuestionCard(
                     onCheck = { value ->
                         answered = true
                         correct = value != null && abs(value - question.answer) <= question.tolerance
+                        saveAnswer(correct)
                         if (correct) onCorrect()
                     }
                 )
@@ -291,6 +311,7 @@ private fun QuestionCard(
                     onConfirm = {
                         answered = true
                         correct = true
+                        saveAnswer(true)
                         onCorrect()
                     }
                 )
@@ -300,6 +321,7 @@ private fun QuestionCard(
                     onConfirm = {
                         answered = true
                         correct = true
+                        saveAnswer(true)
                         onCorrect()
                     }
                 )
@@ -320,7 +342,7 @@ private fun ChoiceList(
     answered: Boolean,
     onPick: (Int) -> Unit
 ) {
-    var picked by remember { mutableStateOf<Int?>(null) }
+    var picked by rememberSaveable(options, correctIndex) { mutableStateOf<Int?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
         options.forEachIndexed { i, label ->
             val isPicked = picked == i
@@ -355,7 +377,7 @@ private fun NumericInput(
     answered: Boolean,
     onCheck: (Double?) -> Unit
 ) {
-    var text by remember { mutableStateOf("") }
+    var text by rememberSaveable(question.id) { mutableStateOf("") }
     Column {
         OutlinedTextField(
             value = text,
@@ -380,7 +402,7 @@ private fun OpenInput(
     answered: Boolean,
     onConfirm: () -> Unit
 ) {
-    var text by remember { mutableStateOf("") }
+    var text by rememberSaveable(question.id) { mutableStateOf("") }
     Column {
         OutlinedTextField(
             value = text,
@@ -403,11 +425,11 @@ private fun MultiStepCard(
     answered: Boolean,
     onConfirm: () -> Unit
 ) {
-    val checks = remember(question.id) { mutableStateMapOf<Int, Boolean>() }
+    var checkedSteps by rememberSaveable(question.id) { mutableStateOf<List<Int>>(emptyList()) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         question.steps.forEachIndexed { i, step ->
             Row(verticalAlignment = Alignment.CenterVertically) {
-                val on = checks[i] == true
+                val on = i in checkedSteps
                 Surface(
                     shape = CircleShape,
                     color = if (on) MaterialTheme.colorScheme.primary else Color.Transparent,
@@ -434,14 +456,18 @@ private fun MultiStepCard(
                 )
             }
             OutlinedButton(
-                onClick = { if (!answered) checks[i] = !(checks[i] ?: false) },
+                onClick = {
+                    if (!answered) {
+                        checkedSteps = if (i in checkedSteps) checkedSteps - i else checkedSteps + i
+                    }
+                },
                 enabled = !answered
-            ) { Text(if (checks[i] == true) "Refazer passo" else "Marcar como feito") }
+            ) { Text(if (i in checkedSteps) "Refazer passo" else "Marcar como feito") }
         }
         Spacer(Modifier.height(Spacing.xs))
         Button(
             onClick = onConfirm,
-            enabled = !answered && question.steps.indices.all { checks[it] == true }
+            enabled = !answered && question.steps.indices.all { it in checkedSteps }
         ) { Text("Concluir etapas") }
     }
 }

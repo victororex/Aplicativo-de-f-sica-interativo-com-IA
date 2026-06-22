@@ -20,6 +20,9 @@ data class FormulaGraph(
 )
 
 data class FormulaAnalysis(
+    val contentType: String,
+    val visualDescription: String,
+    val structuredData: List<String>,
     val ocrText: String,
     val latex: String,
     val problemStatement: String,

@@ -15,7 +15,8 @@ data class EvolutionPoint(
     val label: String,
     val accuracyRate: Int,
     val studySeconds: Int,
-    val questions: Int
+    val questions: Int,
+    val activities: Int = 0
 )
 
 data class TopicPerformance(
@@ -52,7 +53,10 @@ data class AdaptiveProfile(
     val trend: String,
     val nextTopic: String,
     val reviewTopics: List<String>,
-    val suggestedQuestions: List<String>
+    val suggestedQuestions: List<String>,
+    val fuzzyScore: Int = 50,
+    val learningVelocity: String = "em formação",
+    val ignoredTopics: List<String> = emptyList()
 )
 
 data class LearningDashboard(
@@ -74,7 +78,12 @@ data class LearningDashboard(
     val averageResponseTimeSeconds: Int,
     val performanceHistory: List<PerformanceHistoryItem>,
     val recommendations: List<StudyRecommendation>,
-    val adaptiveProfile: AdaptiveProfile
+    val adaptiveProfile: AdaptiveProfile,
+    val aiInteractions: Int = 0,
+    val ocrUses: Int = 0,
+    val voiceUses: Int = 0,
+    val missionsCompleted: Int = 0,
+    val activeStudyDays: Int = 0
 ) {
     val studiedTimeLabel: String
         get() {

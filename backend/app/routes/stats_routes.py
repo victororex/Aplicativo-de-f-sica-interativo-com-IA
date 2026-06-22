@@ -39,6 +39,19 @@ def record_event(
     db: sqlite3.Connection = Depends(get_db),
     current_user: sqlite3.Row | None = Depends(get_optional_user),
 ):
+    user_id = current_user["id"] if current_user else None
+    duplicate = db.execute(
+        """
+        SELECT id FROM analytics_events
+        WHERE ((user_id = ?) OR (user_id IS NULL AND ? IS NULL))
+          AND event_type = ? AND topic = ?
+          AND created_at >= datetime('now', '-1 second')
+        ORDER BY id DESC LIMIT 1
+        """,
+        (user_id, user_id, request.event_type.strip(), request.topic.strip()),
+    ).fetchone()
+    if duplicate is not None:
+        return {"id": duplicate["id"], "recorded": False, "duplicate": True}
     cursor = db.execute(
         """
         INSERT INTO analytics_events (
@@ -47,9 +60,9 @@ def record_event(
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            current_user["id"] if current_user else None,
-            request.event_type,
-            request.topic,
+            user_id,
+            request.event_type.strip(),
+            request.topic.strip(),
             request.is_correct,
             request.difficulty,
             request.response_time_seconds,

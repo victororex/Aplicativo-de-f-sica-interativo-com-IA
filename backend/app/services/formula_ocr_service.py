@@ -35,6 +35,12 @@ class GraphSpec(BaseModel):
 
 
 class FormulaAnalysisDraft(BaseModel):
+    content_type: str = Field(
+        default="exercise",
+        description="formula, graph, table, diagram, circuit, exercise ou other",
+    )
+    visual_description: str = ""
+    structured_data: list[str] = Field(default_factory=list)
     ocr_text: str
     latex: str
     problem_statement: str
@@ -50,6 +56,11 @@ Voce e um especialista em OCR matematico e professor brasileiro de Fisica.
 Analise cuidadosamente a foto enviada e devolva apenas a estrutura solicitada.
 
 Regras:
+- Classifique content_type como formula, graph, table, diagram, circuit, exercise ou other.
+- Descreva em visual_description os elementos visuais relevantes e suas relacoes espaciais.
+- Para graficos, extraia eixos, escalas, unidades, pontos e tendencia em structured_data.
+- Para tabelas, extraia cabecalhos e linhas legiveis em structured_data.
+- Para diagramas e circuitos, identifique componentes, rotulos, conexoes e sentidos.
 - Transcreva todo o enunciado legivel em ocr_text.
 - Converta a formula principal para LaTeX valido, sem delimitadores Markdown.
 - Preserve expoentes, indices, fracoes, radicais, vetores, unidades e sinais.
@@ -78,6 +89,9 @@ def analyze_formula_image(image: NormalizedImage, question: str | None = None) -
 
     graph = _build_graph(draft.graph)
     response = FormulaAnalysisResponse(
+        content_type=draft.content_type.strip().lower() or "other",
+        visual_description=draft.visual_description.strip(),
+        structured_data=[item.strip() for item in draft.structured_data if item.strip()],
         ocr_text=draft.ocr_text.strip(),
         latex=draft.latex.strip(),
         problem_statement=draft.problem_statement.strip(),
@@ -138,6 +152,9 @@ def _analyze_with_openai(image: NormalizedImage, question: str | None) -> Formul
 
 def _mock_analysis() -> FormulaAnalysisDraft:
     return FormulaAnalysisDraft(
+        content_type="exercise",
+        visual_description="Exercicio textual com uma formula de velocidade.",
+        structured_data=["d = 100 m", "t = 20 s"],
         ocr_text="Determine a velocidade para d = 100 m e t = 20 s. v = d/t",
         latex=r"v = \frac{d}{t}",
         problem_statement="Calcular a velocidade media para 100 metros percorridos em 20 segundos.",

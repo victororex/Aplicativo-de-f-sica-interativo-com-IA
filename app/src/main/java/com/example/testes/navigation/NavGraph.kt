@@ -87,9 +87,7 @@ fun SetupNavGraph(
                 onImprovementStats = { navController.navigate(Screen.ImprovementStats.route) { launchSingleTop = true } },
                 onMissions = {
                     navController.navigate(Screen.StudyCampaign.route) {
-                        popUpTo(Screen.Home.route) { saveState = true }
                         launchSingleTop = true
-                        restoreState = true
                     }
                 }
             )
@@ -104,10 +102,15 @@ fun SetupNavGraph(
         }
 
         composable(Screen.StudyCampaign.route) {
-            GalaxyScreenRoute(
-                onBack = { navController.popBackStack() },
-                onPlanetSelected = { planetId ->
-                    navController.navigate(Screen.PlanetMap.createRoute(planetId)) { launchSingleTop = true }
+            PlanetMapScreenRoute(
+                planetId = MissionsRepository.DIMENSIONAL_SUBJECT_ID,
+                onBack = { navController.navigate(Screen.Home.route) { launchSingleTop = true } },
+                onMissionSelected = { node, planet ->
+                    val route = if (planet.id == MissionsRepository.DIMENSIONAL_SUBJECT_ID)
+                        Screen.MissionDetail.createRoute(node.id)
+                    else
+                        Screen.ModuleDetail.createRoute(node.id)
+                    navController.navigate(route) { launchSingleTop = true }
                 }
             )
         }

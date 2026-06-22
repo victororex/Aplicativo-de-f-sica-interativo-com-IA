@@ -72,6 +72,11 @@ class FormulaApiClient {
         val graphJson = json.optJSONObject("graph")
         val warningsJson = json.optJSONArray("warnings")
         return FormulaAnalysis(
+            contentType = json.optString("content_type", "exercise"),
+            visualDescription = json.optString("visual_description"),
+            structuredData = json.optJSONArray("structured_data")?.let { array ->
+                List(array.length()) { index -> array.optString(index) }
+            }.orEmpty(),
             ocrText = json.optString("ocr_text"),
             latex = json.optString("latex"),
             problemStatement = json.optString("problem_statement"),

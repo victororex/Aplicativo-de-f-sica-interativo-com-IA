@@ -43,13 +43,16 @@ class MainActivity : ComponentActivity() {
                             BottomNavigationBar(
                                 currentRoute = currentRoute,
                                 onNavigate = { route ->
-                                    navController.navigate(route) {
-                                        // Avoid building up a large stack of destinations
-                                        popUpTo(Screen.Home.route) {
-                                            saveState = true
+                                    if (route != currentRoute) {
+                                        navController.navigate(route) {
+                                            // Dispose Home when leaving it so the 3D renderer does not stay alive.
+                                            if (currentRoute == Screen.Home.route && route != Screen.Home.route) {
+                                                popUpTo(Screen.Home.route) {
+                                                    inclusive = true
+                                                }
+                                            }
+                                            launchSingleTop = true
                                         }
-                                        launchSingleTop = true
-                                        restoreState = true
                                     }
                                 }
                             )

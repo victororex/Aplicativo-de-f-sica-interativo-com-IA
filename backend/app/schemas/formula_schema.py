@@ -21,6 +21,9 @@ class FormulaGraph(BaseModel):
 
 
 class FormulaAnalysisResponse(BaseModel):
+    content_type: str = "exercise"
+    visual_description: str = ""
+    structured_data: list[str] = Field(default_factory=list)
     ocr_text: str
     latex: str
     problem_statement: str

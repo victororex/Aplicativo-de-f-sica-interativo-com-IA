@@ -60,6 +60,21 @@ class DailyChallengeRepository(
             runCatching {
                 val picksJson = JSONObject()
                 picks.forEach { (k, v) -> picksJson.put(k, v) }
+                val epoch = instance.date.toEpochDay()
+                instance.questions.forEach { q ->
+                    val selected = picks[q.id] ?: -1
+                    LocalBackend.recordDailyAnswer(
+                        SessionManager.accessToken,
+                        q.id,
+                        q.tags.firstOrNull() ?: "Análise Dimensional",
+                        q.options.getOrElse(selected) { "Não respondida" },
+                        q.options.getOrElse(q.correctIndex) { "" },
+                        selected == q.correctIndex,
+                        instance.definition.difficulty.name,
+                        0
+                    )
+                    LocalBackend.recordDailyQuestionUsage(SessionManager.accessToken, q.id, epoch)
+                }
                 LocalBackend.recordDailyChallengeInstance(
                     SessionManager.accessToken,
                     instance.instanceId,
@@ -67,10 +82,6 @@ class DailyChallengeRepository(
                     instance.questions.size,
                     picksJson
                 )
-                val epoch = instance.date.toEpochDay()
-                instance.questions.forEach { q ->
-                    LocalBackend.recordDailyQuestionUsage(SessionManager.accessToken, q.id, epoch)
-                }
             }
         }
     }

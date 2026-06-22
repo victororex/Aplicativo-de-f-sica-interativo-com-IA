@@ -57,6 +57,9 @@ def test_formula_endpoint_returns_structured_mock_response() -> None:
 
     assert response.status_code == 200
     payload = response.json()
+    assert payload["content_type"] == "exercise"
+    assert payload["visual_description"]
+    assert payload["structured_data"]
     assert payload["latex"] == r"v = \frac{d}{t}"
     assert len(payload["steps"]) == 3
     assert len(payload["graph"]["points"]) == 81

@@ -39,7 +39,17 @@ class StatsApiClient {
     suspend fun getDashboard(): Result<LearningDashboard> = withContext(Dispatchers.IO) {
         runCatching {
             val json = LocalBackend.analyticsSnapshot(SessionManager.accessToken)
-            AdaptiveLearningEngine.buildDashboard(json.toSnapshot())
+            AdaptiveLearningEngine.buildDashboard(json.toSnapshot()).also { dashboard ->
+                SessionManager.accessToken?.let { token ->
+                    LocalBackend.saveAdaptiveProfile(
+                        token,
+                        dashboard.adaptiveProfile.fuzzyScore,
+                        dashboard.adaptiveProfile.exerciseDifficulty,
+                        dashboard.adaptiveProfile.nextTopic,
+                        dashboard.adaptiveProfile.learningVelocity
+                    )
+                }
+            }
         }
     }
 

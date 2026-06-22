@@ -99,26 +99,32 @@ object FormulaImageProcessor {
 
             val directory = File(context.cacheDir, "formula_uploads").apply { mkdirs() }
             val output = File.createTempFile("formula-", ".jpg", directory)
-            var quality = 88
-            do {
-                FileOutputStream(output, false).use { stream ->
-                    if (!flattened.compress(Bitmap.CompressFormat.JPEG, quality, stream)) {
-                        throw FormulaImageException("Falha ao comprimir a imagem.")
+            try {
+                var quality = 88
+                do {
+                    FileOutputStream(output, false).use { stream ->
+                        if (!flattened.compress(Bitmap.CompressFormat.JPEG, quality, stream)) {
+                            throw FormulaImageException("Falha ao comprimir a imagem.")
+                        }
                     }
-                }
-                quality -= 8
-            } while (output.length() > MAX_OUTPUT_BYTES && quality >= 56)
-            flattened.recycle()
+                    quality -= 8
+                } while (output.length() > MAX_OUTPUT_BYTES && quality >= 56)
 
-            if (output.length() > MAX_OUTPUT_BYTES) {
+                if (output.length() > MAX_OUTPUT_BYTES) {
+                    output.delete()
+                    throw FormulaImageException("Nao foi possivel reduzir a imagem para menos de 6 MB.")
+                }
+                Log.i(
+                    TAG,
+                    "Formula image prepared ${outputWidth}x${outputHeight}, ${output.length()} bytes"
+                )
+                output
+            } catch (error: Throwable) {
                 output.delete()
-                throw FormulaImageException("Nao foi possivel reduzir a imagem para menos de 6 MB.")
+                throw error
+            } finally {
+                if (!flattened.isRecycled) flattened.recycle()
             }
-            Log.i(
-                TAG,
-                "Formula image prepared ${outputWidth}x${outputHeight}, ${output.length()} bytes"
-            )
-            output
         } finally {
             staging.delete()
         }

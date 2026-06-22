@@ -1,6 +1,7 @@
 package com.example.testes.ui.screens
 
 import android.Manifest
+import android.content.ClipData
 import android.util.Log
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -59,12 +60,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.testes.data.api.ChatApiClient
+import com.example.testes.data.api.SessionManager
+import com.example.testes.data.local.LocalBackend
 import com.example.testes.data.voice.RemoteVoicePlayer
 import com.example.testes.data.voice.VoiceSettingsRepository
 import com.example.testes.ui.components.AppScreenBackground
@@ -74,6 +77,7 @@ import com.example.testes.ui.components.AvatarScene
 import com.example.testes.ui.components.ChatMessageBubble
 import com.example.testes.ui.components.GlassCard
 import com.example.testes.ui.components.VoiceButton
+import com.example.testes.ui.components.aiTextForSpeech
 import com.example.testes.viewmodel.ChatViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -102,7 +106,7 @@ fun ChatScreen(
     val suggestedQuestions by viewModel.suggestedQuestions.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    val clipboardManager = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
     val chatApiClient = remember { ChatApiClient() }
     val voiceSettingsRepository = remember { VoiceSettingsRepository(context) }
     var textState by remember { mutableStateOf("") }
@@ -144,7 +148,7 @@ fun ChatScreen(
 
     LaunchedEffect(localTtsReady) {
         if (localTtsReady) {
-            localTts.language = Locale("pt", "BR")
+            localTts.language = Locale.forLanguageTag("pt-BR")
         }
     }
 
@@ -161,35 +165,39 @@ fun ChatScreen(
         }
         voiceStatus = reason?.let { "$it Usando voz local." } ?: "Usando voz local."
         localTts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "renato-local-${System.currentTimeMillis()}")
+        SessionManager.accessToken?.let { token -> LocalBackend.recordVoiceUsed(token, false) }
     }
 
     fun speak(text: String, forceRemote: Boolean = false) {
         if (!voiceResponsesEnabled) return
+        val speechText = aiTextForSpeech(text)
+        if (speechText.isBlank()) return
         speakJob?.cancel()
         speakJob = scope.launch {
             voicePlayer.stop()
             localTts.stop()
             voiceStatus = "Sintetizando voz do Renato no servidor..."
-            lastSpokenText = text
+            lastSpokenText = speechText
             val settings = voiceSettingsRepository.getSettings()
             if (!settings.remoteVoiceEnabled && !forceRemote) {
                 Log.i(TAG_TTS, "Remote voice disabled by user settings; using local fallback")
                 if (settings.fallbackToLocalTts) {
-                    speakLocal(text, "Voz remota desativada.")
+                    speakLocal(speechText, "Voz remota desativada.")
                 } else {
                     voiceStatus = "Voz remota desativada nas configuracoes."
                 }
                 return@launch
             }
-            Log.i(TAG_TTS, "Requesting backend speech (${text.length} chars)")
-            val remoteSpeech = chatApiClient.synthesizeSpeech(text)
+            Log.i(TAG_TTS, "Requesting backend speech (${speechText.length} chars)")
+            val remoteSpeech = chatApiClient.synthesizeSpeech(speechText)
             remoteSpeech.onSuccess { bytes ->
                 Log.i(TAG_TTS, "Received WAV from backend: ${bytes.size} bytes")
                 voicePlayer.play(bytes)
+                SessionManager.accessToken?.let { token -> LocalBackend.recordVoiceUsed(token, true) }
             }.onFailure { e ->
                 Log.e(TAG_TTS, "Backend speech failed: ${e.message}", e)
                 if (voiceSettingsRepository.getSettings().fallbackToLocalTts) {
-                    speakLocal(text, "Voz personalizada indisponivel.")
+                    speakLocal(speechText, "Voz personalizada indisponivel.")
                     return@onFailure
                 }
                 voiceStatus = "Voz personalizada indisponível. ${e.message ?: ""}".trim()
@@ -353,10 +361,11 @@ fun ChatScreen(
 
     fun kickOff(uri: android.net.Uri, kind: com.example.testes.viewmodel.AttachmentKind) {
         android.util.Log.i(TAG_ATTACH, "kickOff kind=$kind uri=$uri")
+        val startedAt = System.currentTimeMillis()
         scope.launch {
             try {
                 val file = com.example.testes.data.image.FormulaImageProcessor.compress(context, uri)
-                viewModel.sendAttachment(file, uri.toString(), kind)
+                viewModel.sendAttachment(file, uri.toString(), kind, startedAt)
             } catch (e: Throwable) {
                 android.util.Log.e(TAG_ATTACH, "Failed to process attachment: ${e.message}", e)
                 voiceStatus = "Não consegui ler esse anexo: ${e.message ?: "erro desconhecido"}"
@@ -432,7 +441,7 @@ fun ChatScreen(
                             Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar")
                         }
                     },
-                    colors = androidx.compose.material3.TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
                         containerColor = androidx.compose.ui.graphics.Color.Transparent
                     )
                 )
@@ -496,7 +505,13 @@ fun ChatScreen(
                     items(messages, key = { it.id }) { message ->
                         com.example.testes.ui.components.RenatoMessageBubble(
                             message = message.copy(text = message.text.asRenatoUiText()),
-                            onCopy = { clipboardManager.setText(AnnotatedString(it)) },
+                            onCopy = { text ->
+                                scope.launch {
+                                    clipboard.setClipEntry(
+                                        ClipEntry(ClipData.newPlainText("Resposta do Renato", text))
+                                    )
+                                }
+                            },
                             onShare = { txt ->
                                 val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                                     type = "text/plain"
@@ -505,7 +520,11 @@ fun ChatScreen(
                                 context.startActivity(android.content.Intent.createChooser(intent, "Compartilhar"))
                             },
                             onSave = { txt ->
-                                clipboardManager.setText(AnnotatedString(txt))
+                                scope.launch {
+                                    clipboard.setClipEntry(
+                                        ClipEntry(ClipData.newPlainText("Resposta do Renato", txt))
+                                    )
+                                }
                                 voiceStatus = "Resposta copiada para a área de transferência."
                             },
                             onOpenLesson = onOpenLesson
