@@ -1,115 +1,224 @@
-# Física Interativa
+Visão Geral
 
-App Android educacional para Análise Dimensional com tutor IA ("Renato"), trilha de missões,
-desafio diário, OCR de fórmulas e voz personalizada.
+O projeto consiste em um aplicativo mobile para apoio ao ensino de Física, combinando Inteligência Artificial, OCR, Aprendizado Adaptativo e Análise de Dados para criar uma experiência de estudo mais interativa e personalizada.
 
-Stack: Kotlin 2.2 · Jetpack Compose · MVVM · SharedPreferences (local) · FastAPI · SQLite ·
-OpenAI Vision (`gpt-4o-mini`) · MeloTTS → OpenVoice V2.
+O principal diferencial do sistema é permitir que o aluno aprenda Física através de conversas com uma IA, envio de imagens de exercícios e acompanhamento do próprio progresso por meio de métricas e recomendações inteligentes.
 
-## Funcionalidades
+Objetivo
 
-- Cadastro, login, perfil, progresso e histórico locais.
-- Aulas e desafio diário de Análise Dimensional com adaptação por desempenho.
-- Trilha de campanha por etapas.
-- Chat com tutor IA + voz clonada do professor (fallback para TTS do dispositivo).
-- OCR de fórmulas em imagem → passos resolvidos + gráfico.
-- Painel adaptativo (Dashboard) com XP, nível, evolução e recomendações.
+Criar uma plataforma educacional capaz de:
 
-## Pré-requisitos
+Auxiliar no aprendizado de Física.
+Explicar conceitos de forma interativa.
+Resolver exercícios passo a passo.
+Interpretar fórmulas através de imagens.
+Adaptar o conteúdo ao desempenho do aluno.
+Monitorar e analisar a evolução do aprendizado.
+Tecnologias Utilizadas
+Frontend (Android)
+Kotlin
+Jetpack Compose
+Material Design 3
+Navigation Compose
+ViewModel
+Coroutines
+Backend
+Python
+FastAPI
+OCR para fórmulas matemáticas
+APIs de IA
+Inteligência Artificial
+Chat Inteligente
+OCR de Fórmulas
+Sistema Adaptativo
+Lógica Fuzzy
+Recomendações Personalizadas
+Ciência de Dados
+Analytics de Aprendizagem
+Coleta de Métricas
+Data Mining Educacional
+Dashboard de Progresso
+Principais Funcionalidades
+Tutor IA
 
-- **Android Studio Ladybug+** com JDK 17.
-- **Python 3.11+** para o backend.
-- Opcional: GPU com CUDA para acelerar a voz clonada.
-- Opcional: chave da OpenAI (necessária para OCR remoto e Chat remoto).
+O aluno pode conversar com a IA para:
 
-## Configuração — Android
+Tirar dúvidas.
+Solicitar explicações.
+Receber exemplos.
+Resolver exercícios.
+Obter resumos.
+Caminho
+Home
+ → Tutor IA
+OCR de Fórmulas
 
-1. Copie `local.properties.example` (se existir) ou crie um `local.properties`:
-   ```properties
-   USE_REMOTE_AI=true
-   AI_API_BASE_URL=http://10.0.2.2:8000
-   ```
-2. Abra o projeto no Android Studio e rode no emulador (`10.0.2.2` aponta para `localhost` do host).
+Permite enviar imagens contendo:
 
-## Configuração — Backend
+Fórmulas matemáticas.
+Exercícios.
+Expressões físicas.
 
-```bash
-cd backend
-pip install -r requirements.txt
-python main.py
-```
+O sistema identifica o conteúdo da imagem e encaminha para a IA gerar uma explicação ou resolução.
 
-Variáveis de ambiente principais:
+Tecnologias Relacionadas
+Visão Computacional
+OCR
+Inteligência Artificial
+Caminho
+Tutor IA
+ → Enviar Imagem
+ → OCR
+ → Resolução pela IA
+Sistema Adaptativo
 
-| Variável | Padrão | Descrição |
-|----------|--------|-----------|
-| `OPENAI_API_KEY` | — | Necessária para OCR e Chat reais. |
-| `USE_MOCK_AI` | `true` | Em produção, mude para `false`. |
-| `JWT_SECRET_KEY` | placeholder | **Obrigatório** trocar em produção (lifespan aborta se estiver no default). |
-| `APP_ENV` | `development` | Use `production` para validações estritas. |
-| `VOICE_REFERENCE_DIR` | `voices` | Pasta com `professor.wav` (ou outro `.wav` de fallback). |
-| `OPENVOICE_CHECKPOINTS_DIR` | `checkpoints_v2` | Pesos do OpenVoice V2. |
-| `MELOTTS_LANGUAGE` | `ES` | Código de idioma do MeloTTS. |
-| `ALLOWED_ORIGINS` | locais | Em produção, restrinja explicitamente. |
+O aplicativo monitora o comportamento do aluno para personalizar a experiência de estudo.
 
-## Arquitetura de estado
+Analisa:
 
-- `LocalBackend.java` é o banco local (SharedPreferences) — fonte primária offline.
-- `AppStateBus` (`data/state/AppStateBus.kt`) propaga eventos (`LessonCompleted`,
-  `DailyChallengeSubmitted`, `CampaignStageSubmitted`, `ChatMessageSent`, `OcrAnalyzed`,
-  `LessonOpened`, `ProfileUpdated`) para que `HomeViewModel`, `ProfileViewModel` e
-  `DashboardViewModel` se atualizem sem refresh manual.
-- Sessões de estudo são iniciadas/finalizadas em `MainActivity.onResume/onPause`.
+Desempenho.
+Frequência de estudo.
+Progresso.
+Conclusão de atividades.
+Componentes
+AdaptiveLearningEngine
+FuzzyLearningEngine
+Relacionado às disciplinas
+Inteligência Artificial
+Sistemas Inteligentes
+Lógica Fuzzy
+Sistemas Adaptativos
+Ciência de Dados
+Analytics Educacional
 
-## Design System
+O sistema registra eventos de aprendizagem para gerar métricas sobre o progresso do aluno.
 
-- Paleta fria em `ui/theme/Color.kt` (Background `#08111F`, Primary `#4F8EF7`, etc.).
-- Tipografia enxuta em `Type.kt`.
-- Componentes em `ui/components/AppComponents.kt`: `GlassCard`, `PrimaryButton`, `GhostButton`,
-  `SectionHeader`, `StatusChip`, `EmptyState`, `AppTopBar`, `BottomNavigationBar`.
-- Tokens em `DesignTokens.kt` (`Spacing.*`, `Radius.*`, `Elevation.*`).
+Exemplos:
 
-## Rate limit do backend
+Tempo de estudo.
+Missões concluídas.
+Uso da IA.
+Exercícios realizados.
+Evolução geral.
+Arquivos Relacionados
+AnalyticsModels.kt
+AdaptiveLearningEngine.kt
+FuzzyLearningEngine.kt
+Data Mining Educacional
 
-- `/chat/message`: 30 req/min por usuário.
-- `/chat/speech`: 10 req/min por usuário.
-- `/formula/analyze`: 10 req/min por usuário.
+Os dados coletados são utilizados para identificar padrões de aprendizagem.
 
-Implementação em `backend/app/rate_limit.py` (in-memory; trocar por Redis para multi-instância).
+Objetivos:
 
-## Logs
+Detectar dificuldades.
+Identificar conteúdos dominados.
+Gerar recomendações.
+Apoiar o sistema adaptativo.
+Relacionado às disciplinas
+Mineração de Dados
+Ciência de Dados
+Machine Learning
+Dashboard de Aprendizagem
 
-`logging.basicConfig` configurado em `backend/main.py`. Marcadores úteis: `[TTS]`, `[CHAT]`,
-`[CONFIG]`. No Android: `Log.i/w/e` tag `"TTS"` no `ChatScreen`.
+Permite acompanhar:
 
-## Build
+Evolução do estudante.
+Estatísticas de desempenho.
+Histórico de progresso.
+Indicadores de aprendizagem.
+Telas Relacionadas
+ProgressScreen
+GeneralProgressScreen
+ImprovementStatsScreen
+ProfileScreen
+Sistema de Missões
 
-- Android debug: `./gradlew :app:assembleDebug`
-- Backend dev: `python backend/main.py`
+Implementa conceitos de gamificação para aumentar o engajamento.
 
-## Estrutura
+Funcionalidades:
 
-```
-app/src/main/java/com/example/testes/
+Missões diárias.
+Campanhas de estudo.
+Desafios.
+Recompensas de progresso.
+Caminho
+Home
+ → Missões
+Estrutura do Projeto
+app/
+│
 ├── data/
-│   ├── api/        # Clients (Chat, Content, Stats, Learning, Auth, Formula, Session)
-│   ├── local/      # LocalBackend.java (SharedPreferences store)
-│   └── state/      # AppStateBus
-├── model/          # Data classes
-├── navigation/     # NavGraph, Screen
+│   ├── analytics/
+│   ├── api/
+│   ├── image/
+│   ├── voice/
+│   └── local/
+│
+├── model/
+│
+├── navigation/
+│
 ├── ui/
-│   ├── components/ # AppComponents (design system)
-│   ├── screens/    # Telas
-│   └── theme/      # Color, Type, Theme, DesignTokens
-└── viewmodel/      # ViewModels (Home, Profile, Chat, Lessons, Dashboard, FormulaScan)
+│   └── screens/
+│
+├── viewmodel/
+│
+└── assets/
+Funcionalidades de IA Identificadas
+Chat Inteligente
+ChatApiClient
+ChatScreen
+OCR
+FormulaImageProcessor
+formula_ocr_service.py
+Sistema Adaptativo
+AdaptiveLearningEngine.kt
+Lógica Fuzzy
+FuzzyLearningEngine.kt
+Funcionalidades de Ciência de Dados Identificadas
+Analytics
+AnalyticsModels.kt
+Coleta de Dados
+Progresso do usuário
+Missões
+Interações
+Desempenho
+Data Mining Educacional
+Análise de comportamento
+Recomendações de estudo
+Aprendizado adaptativo
+Fluxo Geral do Sistema
+Aluno
+  ↓
+Aplicativo
+  ↓
+Tutor IA
+  ↓
+Resposta Inteligente
 
-backend/
-├── app/
-│   ├── routes/     # FastAPI routes
-│   ├── services/   # AI, OCR, Speech, etc.
-│   ├── rate_limit.py
-│   └── config.py
-├── tts/            # MeloTTS + OpenVoice V2
-├── voices/         # professor.wav
-└── main.py
-```
+ou
+
+Aluno
+  ↓
+Imagem
+  ↓
+OCR
+  ↓
+IA
+  ↓
+Explicação
+Disciplinas Aplicadas no Projeto
+Inteligência Artificial
+IA Conversacional
+OCR
+Visão Computacional
+Lógica Fuzzy
+Sistemas Adaptativos
+Ciência de Dados
+Analytics
+Mineração de Dados
+Visualização de Dados
+Monitoramento de Aprendizagem
+Conclusão
+
+O projeto demonstra a integração entre conceitos de Inteligência Artificial e Ciência de Dados aplicados ao contexto educacional. A plataforma utiliza IA para auxiliar o aluno durante os estudos e emprega técnicas de análise de dados para acompanhar desempenho, identificar padrões de aprendizagem e oferecer uma experiência mais personalizada e eficiente.
