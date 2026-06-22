@@ -11,6 +11,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 
 data class AnalyticsSnapshot(
@@ -44,22 +45,49 @@ object AdaptiveLearningEngine {
         }
         val weak = topics.filter { it.needsReview }.take(3)
         val nextTopic = weak.firstOrNull()?.topic ?: topics.maxByOrNull { it.masteryScore }?.topic ?: DEFAULT_TOPIC
-        val difficulty = recommendedDifficulty(attempts.size, recentAccuracy, topics)
+        val sessionEvents = snapshot.events.filter { it.eventType == "study_session_completed" }
+        val activeDays = snapshot.events
+            .filter { it.timeSpentSeconds > 0 || it.eventType in ACTIVITY_EVENTS }
+            .map { TimeUnit.MILLISECONDS.toDays(it.timestamp) }
+            .distinct()
+            .size
+        val responseAverage = attempts.map { it.responseTimeSeconds }.filter { it > 0 }.averageOrZero()
+        val fuzzy = FuzzyLearningEngine.infer(
+            FuzzyLearningInputs(
+                accuracy = if (attempts.isEmpty()) 45.0 else recentAccuracy.toDouble(),
+                responseSpeed = FuzzyLearningEngine.responseSpeedFromSeconds(responseAverage),
+                studyFrequency = (activeDays * 100.0 / 12.0).coerceAtMost(100.0),
+                missionProgress = percentage(snapshot.completedPhases, snapshot.totalPhases).toDouble(),
+                lessonProgress = percentage(snapshot.completedLessons, snapshot.totalLessons).toDouble()
+            )
+        )
+        val difficulty = fuzzy.level
         val explanationLevel = when {
             attempts.size < 3 || recentAccuracy < 55 -> "fundamental, com analogias e passos curtos"
             recentAccuracy < 80 -> "intermediario, com exemplos guiados"
             else -> "avancado, direto e com desafios de vestibular"
         }
-        val sessionEvents = snapshot.events.filter { it.eventType == "study_session_completed" }
         val sessionSeconds = sessionEvents.sumOf { it.timeSpentSeconds.coerceAtLeast(0) }
-        val totalStudy = maxOf(snapshot.legacyStudySeconds, sessionSeconds)
+        val totalStudy = if (sessionSeconds > 0) sessionSeconds else snapshot.legacyStudySeconds.coerceAtLeast(0)
+        val learningVelocity = when {
+            attempts.size < 4 -> "em formação"
+            recentAccuracy >= olderAccuracy + 10 -> "acelerando"
+            recentAccuracy + 10 <= olderAccuracy -> "desacelerando"
+            else -> "constante"
+        }
+        val studiedTopicNames = topics.map { it.topic.lowercase(Locale.ROOT) }.toSet()
+        val knownTopics = snapshot.events.map { normalizedTopic(it.topic) }.distinct()
+        val ignoredTopics = knownTopics.filter { it.lowercase(Locale.ROOT) !in studiedTopicNames }.take(3)
         val profile = AdaptiveProfile(
             explanationLevel = explanationLevel,
             exerciseDifficulty = difficulty,
             trend = trend,
             nextTopic = nextTopic,
             reviewTopics = weak.map { it.topic },
-            suggestedQuestions = suggestedQuestions(nextTopic, difficulty)
+            suggestedQuestions = suggestedQuestions(nextTopic, difficulty),
+            fuzzyScore = fuzzy.score,
+            learningVelocity = learningVelocity,
+            ignoredTopics = ignoredTopics
         )
         val recommendations = recommendations(profile, weak, attempts.size, accuracy)
 
@@ -79,10 +107,24 @@ object AdaptiveLearningEngine {
             weeklyEvolution = timeSeries(attempts, snapshot.events, now, 6, Calendar.WEEK_OF_YEAR, "'S'w"),
             monthlyEvolution = timeSeries(attempts, snapshot.events, now, 6, Calendar.MONTH, "MMM"),
             accuracyRate = accuracy,
-            averageResponseTimeSeconds = attempts.map { it.responseTimeSeconds }.filter { it > 0 }.averageOrZero(),
-            performanceHistory = recentAttempts.take(20).map(::historyItem),
+            averageResponseTimeSeconds = responseAverage,
+            performanceHistory = snapshot.events
+                .filter { it.eventType in HISTORY_EVENTS }
+                .sortedByDescending { it.timestamp }
+                .take(20)
+                .map(::historyItem),
             recommendations = recommendations,
-            adaptiveProfile = profile
+            adaptiveProfile = profile,
+            aiInteractions = snapshot.events.count { it.eventType == "chat_question_sent" },
+            ocrUses = snapshot.events.count { it.eventType == "ocr_used" },
+            voiceUses = snapshot.events.count { it.eventType == "voice_used" },
+            missionsCompleted = snapshot.events.count {
+                it.eventType in setOf(
+                    "campaign_stage_completed", "track_mission_completed",
+                    "daily_instance_completed", "daily_challenge_completed"
+                )
+            },
+            activeStudyDays = activeDays
         )
     }
 
@@ -100,16 +142,6 @@ object AdaptiveLearningEngine {
         val confidence = (events.size.coerceAtMost(8) / 8f * 100).roundToInt()
         val mastery = (accuracy * 0.7f + speedScore * 0.15f + confidence * 0.15f).roundToInt()
         return TopicPerformance(topic, events.size, correct, accuracy, averageTime, mastery, events.size >= 2 && mastery < 65)
-    }
-
-    private fun recommendedDifficulty(
-        attempts: Int,
-        recentAccuracy: Int,
-        topics: List<TopicPerformance>
-    ): String = when {
-        attempts < 3 || recentAccuracy < 55 || topics.any { it.attempts >= 2 && it.accuracyRate < 45 } -> "Facil"
-        recentAccuracy >= 85 && attempts >= 6 -> "Avancada"
-        else -> "Media"
     }
 
     private fun recommendations(
@@ -198,23 +230,50 @@ object AdaptiveLearningEngine {
                 label = formatter.format(Date(start.timeInMillis)).replaceFirstChar { it.uppercase() },
                 accuracyRate = accuracyFor(periodAttempts),
                 studySeconds = periodEvents.sumOf { it.timeSpentSeconds.coerceAtLeast(0) },
-                questions = periodAttempts.size
+                questions = periodAttempts.size,
+                activities = periodEvents.count { it.eventType in ACTIVITY_EVENTS }
             )
         }
     }
 
-    private fun historyItem(event: LearningEvent) = PerformanceHistoryItem(
-        id = event.id,
-        topic = normalizedTopic(event.topic),
-        activity = "Exercicio",
-        result = if (event.isCorrect == true) "Correta" else "Revisar",
-        difficulty = event.difficulty ?: "Nao informada",
-        responseTimeSeconds = event.responseTimeSeconds,
-        timestamp = event.timestamp
-    )
+    private fun historyItem(event: LearningEvent): PerformanceHistoryItem {
+        val details = when (event.eventType) {
+            "exercise_answered" -> Triple(
+                "Exercício",
+                if (event.isCorrect == true) "Correta" else "Revisar",
+                event.difficulty ?: "Não informada"
+            )
+            "chat_question_sent" -> Triple("Chat com Renato", "Pergunta enviada", "IA")
+            "lesson_opened" -> Triple("Aula", "Aula acessada", "Estudo")
+            "lesson_completed" -> Triple("Aula", "Aula concluída", "Estudo")
+            "ocr_used" -> Triple("Análise de imagem", "OCR concluído", "IA")
+            "voice_used" -> Triple("Voz personalizada", "Áudio reproduzido", "IA")
+            "campaign_stage_completed", "track_mission_completed" ->
+                Triple("Missão", "Missão concluída", event.difficulty ?: "Trilha")
+            "daily_instance_completed", "daily_challenge_completed" ->
+                Triple("Desafio diário", "Desafio concluído", event.difficulty ?: "Misto")
+            else -> Triple("Atividade", "Concluída", event.difficulty ?: "Geral")
+        }
+        return PerformanceHistoryItem(
+            id = event.id,
+            topic = normalizedTopic(event.topic),
+            activity = details.first,
+            result = details.second,
+            difficulty = details.third,
+            responseTimeSeconds = event.responseTimeSeconds,
+            timestamp = event.timestamp
+        )
+    }
 
     private fun normalizedTopic(topic: String): String = topic.trim().ifBlank { DEFAULT_TOPIC }
     private fun accuracyFor(events: List<LearningEvent>) = percentage(events.count { it.isCorrect == true }, events.size)
     private fun percentage(value: Int, total: Int) = if (total == 0) 0 else (value * 100f / total).roundToInt()
     private fun List<Int>.averageOrZero() = if (isEmpty()) 0 else average().roundToInt()
+
+    private val ACTIVITY_EVENTS = setOf(
+        "lesson_opened", "lesson_completed", "exercise_answered", "chat_question_sent",
+        "ocr_used", "voice_used", "track_mission_completed", "campaign_stage_completed",
+        "daily_instance_completed", "daily_challenge_completed"
+    )
+    private val HISTORY_EVENTS = ACTIVITY_EVENTS
 }

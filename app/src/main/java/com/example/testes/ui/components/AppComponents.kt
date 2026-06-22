@@ -54,7 +54,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SmallFloatingActionButton
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -184,7 +184,7 @@ fun BottomNavigationBar(
     ) {
         val items = listOf(
             Triple("Início", "home", Icons.Default.Home),
-            Triple("Missão", "study_campaign", Icons.Default.Science),
+            Triple("Missões", "study_campaign", Icons.Default.Science),
             Triple("Renato", "chat", Icons.Default.Psychology),
             Triple("Perfil", "profile", Icons.Default.Person)
         )
@@ -502,46 +502,6 @@ fun ChatMessageBubble(
 }
 
 @Composable
-private fun FormattedChatText(message: String, color: Color) {
-    val lines = message.lines()
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        lines.forEach { rawLine ->
-            val line = rawLine.trimEnd()
-            if (line.isBlank()) {
-                Spacer(Modifier.height(2.dp))
-            } else if (line.looksLikeFormula()) {
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)
-                ) {
-                    Text(
-                        text = line,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                        ),
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            } else {
-                Text(text = line, color = color, style = MaterialTheme.typography.bodyMedium)
-            }
-        }
-    }
-}
-
-private fun String.looksLikeFormula(): Boolean {
-    val text = trim()
-    return text.contains("=") ||
-        text.contains("[M]") ||
-        text.contains("[L]") ||
-        text.contains("[T]") ||
-        text.startsWith("v =") ||
-        text.startsWith("[v]")
-}
-
-@Composable
 fun VoiceButton(onClick: () -> Unit, isListening: Boolean = false) {
     SmallFloatingActionButton(
         onClick = onClick,
@@ -633,7 +593,10 @@ fun RenatoMessageBubble(
             color = containerColor,
             border = if (isUser) null else BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.22f)),
             modifier = Modifier
-                .widthIn(max = 320.dp)
+                .then(
+                    if (isUser) Modifier.widthIn(max = 320.dp)
+                    else Modifier.fillMaxWidth()
+                )
                 .combinedClickable(
                     onClick = {},
                     onLongClick = { menuOpen = true }
@@ -658,20 +621,28 @@ fun RenatoMessageBubble(
                 } else if (message.sections.isNotEmpty()) {
                     SectionsContent(message.sections)
                 } else if (message.text.isNotBlank()) {
-                    FormattedChatText(message = message.text, color = contentColor)
+                    if (isUser) {
+                        Text(
+                            text = message.text,
+                            color = contentColor,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    } else {
+                        AiMarkdownMessage(message = message.text)
+                    }
                 }
                 message.relatedLesson?.let { lesson ->
                     Spacer(Modifier.height(10.dp))
-                    Divider(color = CardBorder)
+                    HorizontalDivider(color = CardBorder)
                     Spacer(Modifier.height(10.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("📖", modifier = Modifier.padding(end = 8.dp))
+                        Text("📚", modifier = Modifier.padding(end = 8.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "Aula recomendada",
+                                "Aula relacionada",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -718,7 +689,7 @@ private fun SectionsContent(sections: List<com.example.testes.model.MessageSecti
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         sections.forEachIndexed { index, section ->
             if (index > 0) {
-                Divider(color = CardBorder)
+                HorizontalDivider(color = CardBorder)
             }
             Row(verticalAlignment = Alignment.Top) {
                 Text(section.icon, modifier = Modifier.padding(end = 8.dp))

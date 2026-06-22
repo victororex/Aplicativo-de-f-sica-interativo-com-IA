@@ -39,8 +39,8 @@ class Settings:
     melotts_language: str = os.getenv("MELOTTS_LANGUAGE", "ES")
     melotts_speaker: str | None = os.getenv("MELOTTS_SPEAKER") or None
     melotts_speed: float = float(os.getenv("MELOTTS_SPEED", "1.0"))
-    # tts_engine: "edge_pt" (PT-BR via Microsoft Edge Neural) ou "melotts" (pipeline antiga).
-    tts_engine: str = os.getenv("TTS_ENGINE", "edge_pt")
+    # PT-BR neural fornece a pronúncia; OpenVoice V2 aplica o timbre do professor.
+    tts_engine: str = os.getenv("TTS_ENGINE", "edge_openvoice")
     edge_tts_voice: str = os.getenv("EDGE_TTS_VOICE", "pt-BR-AntonioNeural")
     edge_tts_rate: str = os.getenv("EDGE_TTS_RATE", "+0%")
     edge_tts_pitch: str = os.getenv("EDGE_TTS_PITCH", "+0Hz")

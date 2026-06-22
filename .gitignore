@@ -58,6 +58,21 @@ backend/tmp/*
 backend/uvicorn.pid
 backend/uvicorn.*.log
 backend/*.log
+backend/backend-server.pid
+
+# Local Android QA artifacts
+/.sceneview-aar/
+/qa-*
+/current-ui.xml
+/app-opened.png
+/after-wait-final.png
+/home-*.png
+/mission-*.png
+/missions-*.png
+/mission-*.xml
+/missions-*.xml
+/missoes-*.png
+/stable-mission-final.png
 
 # Audio assets (geram grande peso; subir só sob demanda)
 

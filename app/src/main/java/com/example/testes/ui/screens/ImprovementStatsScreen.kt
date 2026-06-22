@@ -18,11 +18,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -122,8 +125,15 @@ private fun DashboardContent(dashboard: LearningDashboard) {
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    "Nível: ${dashboard.adaptiveProfile.exerciseDifficulty} · Foco: ${dashboard.adaptiveProfile.nextTopic}",
+                    "Nível fuzzy: ${dashboard.adaptiveProfile.exerciseDifficulty} · "
+                        + "${dashboard.adaptiveProfile.fuzzyScore}/100",
                     style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "Foco: ${dashboard.adaptiveProfile.nextTopic} · aprendizagem "
+                        + dashboard.adaptiveProfile.learningVelocity,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -143,23 +153,48 @@ private fun DashboardContent(dashboard: LearningDashboard) {
                     Modifier.weight(1f)
                 )
             }
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                MetricCard("IA", dashboard.aiInteractions.toString(), Icons.Default.Psychology, Modifier.weight(1f))
+                MetricCard("OCR", dashboard.ocrUses.toString(), Icons.Default.CameraAlt, Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                MetricCard("Voz", dashboard.voiceUses.toString(), Icons.Default.RecordVoiceOver, Modifier.weight(1f))
+                MetricCard("Missões", dashboard.missionsCompleted.toString(), Icons.Default.Flag, Modifier.weight(1f))
+            }
+            Text(
+                "${dashboard.activeStudyDays} dias ativos registrados",
+                modifier = Modifier.padding(top = 8.dp),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         item {
             GlassCard {
                 Text("Evolucao", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("Diaria", "Semanal", "Mensal").forEachIndexed { index, label ->
-                        AssistChip(onClick = { period = index }, label = { Text(label) })
+                        FilterChip(
+                            selected = period == index,
+                            onClick = { period = index },
+                            label = { Text(label) }
+                        )
                     }
                 }
                 EvolutionChart(series)
             }
         }
         item {
-            SectionHeading("Dominio por assunto", "${dashboard.topicsStudied.size} assuntos estudados")
+            SectionHeading("Dominio por assunto", "${dashboard.topicPerformance.size} assuntos avaliados")
         }
         if (dashboard.topicPerformance.isEmpty()) {
-            item { EmptyAnalyticsCard("Responda exercicios para liberar a analise por assunto.") }
+            item {
+                EmptyAnalyticsCard(
+                    "As conversas e aulas já entram na evolução e no histórico. "
+                        + "Responda um exercício, missão ou desafio para calcular seu domínio."
+                )
+            }
         } else {
             items(dashboard.topicPerformance, key = { it.topic }) { topic -> TopicMasteryCard(topic) }
         }
@@ -184,7 +219,11 @@ private fun DashboardContent(dashboard: LearningDashboard) {
             }
         }
         item {
-            SectionHeading("Historico recente", "${dashboard.questionsAsked} perguntas feitas ao Renato")
+            SectionHeading(
+                "Historico recente",
+                "${dashboard.performanceHistory.size} atividades recentes · "
+                    + "${dashboard.questionsAsked} perguntas ao Renato"
+            )
         }
         if (dashboard.performanceHistory.isEmpty()) {
             item { EmptyAnalyticsCard("Seu historico aparecera depois da primeira resposta.") }
@@ -192,17 +231,21 @@ private fun DashboardContent(dashboard: LearningDashboard) {
             items(dashboard.performanceHistory.take(8)) { item ->
                 GlassCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        val correct = item.result == "Correta"
+                        val statusColor = when (item.result) {
+                            "Correta" -> MaterialTheme.colorScheme.tertiary
+                            "Revisar" -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.primary
+                        }
                         Box(
                             Modifier.size(10.dp).background(
-                                if (correct) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error,
+                                statusColor,
                                 CircleShape
                             )
                         )
                         Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                            Text(item.topic, fontWeight = FontWeight.Bold)
+                            Text(item.activity, fontWeight = FontWeight.Bold)
                             Text(
-                                "${item.result} - ${item.difficulty} - ${formatDate(item.timestamp)}",
+                                "${item.topic} · ${item.result} · ${formatDate(item.timestamp)}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -228,20 +271,47 @@ private fun MetricCard(label: String, value: String, icon: androidx.compose.ui.g
 private fun EvolutionChart(points: List<EvolutionPoint>) {
     val primary = MaterialTheme.colorScheme.primary
     val grid = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-    Canvas(Modifier.fillMaxWidth().height(190.dp).padding(top = 12.dp)) {
-        if (points.isEmpty()) return@Canvas
+    val hasPerformance = points.any { it.questions > 0 }
+    val hasActivity = points.any { it.activities > 0 }
+    val values = points.map {
+        if (hasPerformance) it.accuracyRate.toFloat() else it.activities.toFloat()
+    }
+    val maximum = if (hasPerformance) 100f else (values.maxOrNull() ?: 0f).coerceAtLeast(1f)
+
+    Text(
+        when {
+            hasPerformance -> "Precisão das respostas (%)"
+            hasActivity -> "Atividades registradas por período"
+            else -> "Nenhuma atividade registrada neste período"
+        },
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Canvas(Modifier.fillMaxWidth().height(190.dp).padding(top = 12.dp, bottom = 4.dp)) {
+        if (points.isEmpty() || !hasActivity) return@Canvas
         repeat(5) { index ->
             val y = size.height * index / 4f
             drawLine(grid, Offset(0f, y), Offset(size.width, y), strokeWidth = 1f)
         }
         val step = if (points.size == 1) size.width else size.width / (points.size - 1)
         val path = Path()
-        points.forEachIndexed { index, point ->
+        val fillPath = Path()
+        values.forEachIndexed { index, value ->
             val x = index * step
-            val y = size.height - (point.accuracyRate.coerceIn(0, 100) / 100f * size.height)
-            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            val y = size.height - (value.coerceIn(0f, maximum) / maximum * size.height)
+            if (index == 0) {
+                path.moveTo(x, y)
+                fillPath.moveTo(x, size.height)
+                fillPath.lineTo(x, y)
+            } else {
+                path.lineTo(x, y)
+                fillPath.lineTo(x, y)
+            }
             drawCircle(primary, radius = 6f, center = Offset(x, y))
         }
+        fillPath.lineTo(size.width, size.height)
+        fillPath.close()
+        drawPath(fillPath, primary.copy(alpha = 0.12f))
         drawPath(path, primary, style = Stroke(width = 5f, cap = StrokeCap.Round))
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

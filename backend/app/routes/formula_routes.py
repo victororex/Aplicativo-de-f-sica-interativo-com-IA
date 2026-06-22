@@ -3,11 +3,13 @@ from __future__ import annotations
 import logging
 
 import sqlite3
+import time
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
+from app.database import get_db
 from app.rate_limit import enforce_rate_limit
 from app.schemas.formula_schema import FormulaAnalysisResponse
 from app.security import get_optional_user
@@ -23,8 +25,10 @@ router = APIRouter()
 async def analyze_formula(
     image: UploadFile = File(...),
     question: str | None = Form(default=None),
+    db: sqlite3.Connection = Depends(get_db),
     current_user: sqlite3.Row | None = Depends(get_optional_user),
 ) -> FormulaAnalysisResponse:
+    started_at = time.monotonic()
     user_id = current_user["id"] if current_user else None
     enforce_rate_limit("formula", user_id, max_per_minute=10)
     declared_type = (image.content_type or "").lower()
@@ -50,7 +54,18 @@ async def analyze_formula(
             content,
             settings.formula_max_dimension,
         )
-        return await run_in_threadpool(analyze_formula_image, normalized, question)
+        result = await run_in_threadpool(analyze_formula_image, normalized, question)
+        elapsed = min(14_400, max(0, round(time.monotonic() - started_at)))
+        db.execute(
+            """
+            INSERT INTO analytics_events (
+                user_id, event_type, topic, response_time_seconds, time_spent_seconds
+            ) VALUES (?, 'ocr_used', ?, ?, 0)
+            """,
+            (user_id, result.content_type or "OCR", elapsed),
+        )
+        db.commit()
+        return result
     except InvalidFormulaImage as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except FormulaAnalysisUnavailable as error:

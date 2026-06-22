@@ -1,121 +1,77 @@
 package com.example.testes.ui.components
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import com.example.testes.ui.theme.CardBorder
 import com.example.testes.ui.theme.Radius
-import com.example.testes.ui.theme.Spacing
-import io.github.sceneview.SceneView
-import io.github.sceneview.environment.rememberKTXEnvironment
-import io.github.sceneview.math.Position
-import io.github.sceneview.node.ModelNode
-import io.github.sceneview.rememberCameraManipulator
-import io.github.sceneview.rememberEngine
-import io.github.sceneview.rememberEnvironmentLoader
-import io.github.sceneview.rememberMainLightNode
-import io.github.sceneview.rememberModelInstance
-import io.github.sceneview.rememberModelLoader
 
-private const val AvatarGlbAsset = "models/avatar.glb"
-
+/**
+ * Lightweight avatar presentation.
+ *
+ * The previous Filament scene kept a native 3D engine, model and environment in
+ * memory for a decorative chat header. On constrained devices this pushed the
+ * process above 200 MB and allowed the low-memory killer to terminate the app.
+ */
 @Composable
 fun AvatarScene(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val hasGlb = remember {
-        runCatching {
-            context.assets.open(AvatarGlbAsset).close()
-            true
-        }.getOrDefault(false)
-    }
     val shape = RoundedCornerShape(Radius.lg)
-
+    val primary = MaterialTheme.colorScheme.primary
     Box(
         modifier = modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.74f), shape)
-            .border(1.dp, CardBorder, shape)
+            .border(1.dp, CardBorder, shape),
+        contentAlignment = Alignment.Center
     ) {
-        if (hasGlb) {
-            val engine = rememberEngine()
-            val modelLoader = rememberModelLoader(engine)
-            val environmentLoader = rememberEnvironmentLoader(engine)
-            val mainLightNode = rememberMainLightNode(engine) {
-                intensity = 42_000f
-                position = Position(x = -1.2f, y = 2.0f, z = 2.6f)
-            }
-            val environment = rememberKTXEnvironment(
-                environmentLoader,
-                "environments/neutral/neutral_ibl.ktx",
-                "environments/neutral/neutral_skybox.ktx"
+        Canvas(Modifier.fillMaxSize()) {
+            val center = Offset(size.width / 2f, size.height / 2f)
+            drawCircle(primary.copy(alpha = 0.08f), size.minDimension * 0.38f, center)
+            drawCircle(
+                Color.White.copy(alpha = 0.10f),
+                size.minDimension * 0.29f,
+                center,
+                style = Stroke(width = 1.4.dp.toPx())
             )
-
-            if (environment != null) {
-                SceneView(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color(0xFF07101D), shape),
-                    engine = engine,
-                    modelLoader = modelLoader,
-                    environment = environment,
-                    mainLightNode = mainLightNode,
-                    cameraManipulator = rememberCameraManipulator()
-                ) {
-                    rememberModelInstance(modelLoader, AvatarGlbAsset)?.let { modelInstance ->
-                        ModelNode(
-                            modelInstance = modelInstance,
-                            scaleToUnits = 1.65f,
-                            centerOrigin = Position(y = 0.82f),
-                            autoAnimate = true
-                        )
-                    }
-                }
-            } else {
-                AvatarMissingAssetMessage(modifier = Modifier.align(Alignment.Center))
-            }
-        } else {
-            AvatarMissingAssetMessage(modifier = Modifier.align(Alignment.Center))
+            drawLine(
+                color = primary.copy(alpha = 0.35f),
+                start = Offset(size.width * 0.18f, size.height * 0.76f),
+                end = Offset(size.width * 0.82f, size.height * 0.24f),
+                strokeWidth = 2.dp.toPx(),
+                cap = StrokeCap.Round
+            )
         }
-    }
-}
-
-@Composable
-private fun AvatarMissingAssetMessage(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.padding(Spacing.md),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "Avatar 3D pronto para conectar",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(Spacing.xs))
-        Text(
-            text = "Converta app/src/main/assets/models/avatar.obj para avatar.glb e salve em assets/models/avatar.glb.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
+        Box(
+            modifier = Modifier
+                .size(112.dp)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), CircleShape)
+                .border(1.dp, primary.copy(alpha = 0.35f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Psychology,
+                contentDescription = "Renato",
+                modifier = Modifier.size(58.dp),
+                tint = primary
+            )
+        }
     }
 }

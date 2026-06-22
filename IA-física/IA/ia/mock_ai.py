@@ -1,21 +1,28 @@
 def responder_mock(pergunta: str) -> str:
     return """
-Resposta curta:
-A Analise Dimensional ajuda a conferir se uma formula faz sentido comparando as dimensoes fisicas dos dois lados.
+# Análise Dimensional
 
-Passo a passo:
-* Identifique as grandezas da pergunta.
-* Troque cada grandeza por [M], [L] e [T].
-* Simplifique as potencias.
-* Compare os dois lados da igualdade.
+## Explicação
 
-Formula ou relacao dimensional:
+A **Análise Dimensional** verifica se uma fórmula é coerente comparando as dimensões físicas dos dois lados.
+
+## Pontos principais
+
+1. Identifique as grandezas da pergunta.
+2. Troque cada grandeza por `[M]`, `[L]` e `[T]`.
+3. Simplifique as potências.
+4. Compare os dois lados da igualdade.
+
+$$
 v = d / t
 [v] = [L] / [T] = [L][T]^-1
+$$
 
-Exemplo simples:
-Se a pergunta envolve velocidade, pense em distancia dividida por tempo. Distancia tem dimensao [L] e tempo tem dimensao [T].
+## Exemplo
 
-Resumo final:
-Quando as dimensoes nao combinam, a formula precisa ser revista antes dos calculos.
+Na velocidade, a distância tem dimensão `[L]` e o tempo tem dimensão `[T]`.
+
+## Resumo
+
+Se as dimensões não combinam, a fórmula precisa ser revista antes dos cálculos.
 """

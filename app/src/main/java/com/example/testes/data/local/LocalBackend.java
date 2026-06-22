@@ -227,9 +227,7 @@ public final class LocalBackend {
             recordEvent(userId, "lesson_completed", lessonId, JSONObject.NULL, JSONObject.NULL, JSONObject.NULL, 210);
         }
         prefs.edit().putString(key(userId, "completed_lessons"), completed.toString()).apply();
-        com.example.testes.data.state.AppStateBus.INSTANCE.emit(
-                com.example.testes.data.state.AppEvent.LessonCompleted.INSTANCE
-        );
+        emitAppEvent("LessonCompleted");
         return progressSummary(token);
     }
 
@@ -321,6 +319,30 @@ public final class LocalBackend {
                 .put("completed_at", attempt.optString("date"));
     }
 
+    public static boolean shouldShowDailyChallengePrompt(String token) {
+        try {
+            int userId = userIdFromToken(token);
+            String dismissedDate = prefs.getString(
+                    key(userId, "daily_prompt_dismissed_date"),
+                    ""
+            );
+            return !today().equals(dismissedDate);
+        } catch (RuntimeException error) {
+            return false;
+        }
+    }
+
+    public static void dismissDailyChallengePrompt(String token) {
+        try {
+            int userId = userIdFromToken(token);
+            prefs.edit()
+                    .putString(key(userId, "daily_prompt_dismissed_date"), today())
+                    .apply();
+        } catch (RuntimeException ignored) {
+            // The in-memory popup still closes when there is no valid session.
+        }
+    }
+
     public static void recordDailyChallengeStarted(String token) throws JSONException {
         int userId = userIdFromToken(token);
         recordEvent(userId, "daily_challenge_started", JSONObject.NULL, "daily", JSONObject.NULL, JSONObject.NULL, 0);
@@ -340,9 +362,7 @@ public final class LocalBackend {
         prefs.edit().putString(key(userId, "daily_attempt"), attempt.toString()).apply();
         addStats(userId, total, score, 0, 0, 180);
         recordEvent(userId, "daily_challenge_completed", JSONObject.NULL, "daily", score >= total, "misto", 180);
-        com.example.testes.data.state.AppStateBus.INSTANCE.emit(
-                com.example.testes.data.state.AppEvent.DailyChallengeSubmitted.INSTANCE
-        );
+        emitAppEvent("DailyChallengeSubmitted");
         return quizResult(score, total);
     }
 
@@ -381,9 +401,7 @@ public final class LocalBackend {
         prefs.edit().putString(key(userId, "campaign_" + nodeId), saved.toString()).apply();
         addStats(userId, total, score, !wasComplete && isComplete ? 1 : 0, 0, 240);
         recordEvent(userId, "campaign_stage_completed", JSONObject.NULL, nodeId, isComplete, "campanha", 240);
-        com.example.testes.data.state.AppStateBus.INSTANCE.emit(
-                com.example.testes.data.state.AppEvent.CampaignStageSubmitted.INSTANCE
-        );
+        emitAppEvent("CampaignStageSubmitted");
         return quizResult(score, total);
     }
 
@@ -433,12 +451,67 @@ public final class LocalBackend {
         );
     }
 
+    public static void recordTrackMissionAnswer(
+            String token,
+            String questionId,
+            String topic,
+            boolean isCorrect,
+            int responseTimeSeconds
+    ) throws JSONException {
+        int userId = userIdFromToken(token);
+        recordEventWithTopic(
+                userId,
+                "exercise_answered",
+                topic == null || topic.trim().isEmpty() ? SUBJECT_NAME : topic.trim(),
+                JSONObject.NULL,
+                questionId,
+                isCorrect,
+                "Trilha",
+                Math.max(0, responseTimeSeconds)
+        );
+        addStats(userId, 1, isCorrect ? 1 : 0, 0, 0, 0);
+        emitAppEvent("TrackMissionAnswerRecorded");
+    }
+
     public static JSONObject analyticsSnapshot(String token) throws JSONException {
         int userId = userIdFromToken(token);
+        JSONArray events = jsonArray(key(userId, "learning_events"));
+        JSONArray legacyChatHistory = chatHistory(token);
+        int recordedChatQuestions = 0;
+        for (int i = 0; i < events.length(); i++) {
+            if ("chat_question_sent".equals(events.getJSONObject(i).optString("event_type"))) {
+                recordedChatQuestions++;
+            }
+        }
+        int missingChatQuestions = Math.max(
+                0,
+                stats(userId).optInt("chat_questions") - recordedChatQuestions
+        );
+        for (int i = legacyChatHistory.length() - 1; i >= 0 && missingChatQuestions > 0; i--) {
+            JSONObject message = legacyChatHistory.optJSONObject(i);
+            if (message == null || !message.optBoolean("from_user", false)) continue;
+            long timestamp = message.optLong("time", System.currentTimeMillis());
+            events.put(new JSONObject()
+                    .put("id", "legacy-chat-" + timestamp + "-" + i)
+                    .put("user_id", userId)
+                    .put("event_type", "chat_question_sent")
+                    .put("topic", SUBJECT_NAME)
+                    .put("lesson_id", JSONObject.NULL)
+                    .put("question_id", JSONObject.NULL)
+                    .put("selected_answer", JSONObject.NULL)
+                    .put("correct_answer", JSONObject.NULL)
+                    .put("is_correct", JSONObject.NULL)
+                    .put("difficulty", JSONObject.NULL)
+                    .put("response_time_seconds", 0)
+                    .put("time_spent_seconds", 0)
+                    .put("timestamp", timestamp));
+            missingChatQuestions--;
+        }
         return new JSONObject()
                 .put("schema_version", 2)
-                .put("events", jsonArray(key(userId, "learning_events")))
+                .put("events", events)
                 .put("stats", stats(userId))
+                .put("adaptive_profile", jsonObject(key(userId, "adaptive_profile"), new JSONObject()))
                 .put("completed_lessons", completedLessons(token).length())
                 .put("total_lessons", lessonsData().length())
                 .put("completed_phases", completedCampaignCount(userId))
@@ -520,8 +593,8 @@ public final class LocalBackend {
         String cleanMessage = message == null ? "" : message.trim();
         String answer = Tutor.answer(cleanMessage);
         saveChatExchange(token, cleanMessage, answer);
-        addStats(userId, 0, 0, 0, 1, 45);
-        recordEvent(userId, "chat_question_sent", JSONObject.NULL, JSONObject.NULL, JSONObject.NULL, JSONObject.NULL, 45);
+        addStats(userId, 0, 0, 0, 1, 0);
+        recordEvent(userId, "chat_question_sent", JSONObject.NULL, JSONObject.NULL, JSONObject.NULL, JSONObject.NULL, 0);
 
         return new JSONObject()
                 .put("session_id", userId)
@@ -562,16 +635,14 @@ public final class LocalBackend {
     public static void incrementChatStats(String token) {
         try {
             addStats(userIdFromToken(token), 0, 0, 0, 1, 0);
-            com.example.testes.data.state.AppStateBus.INSTANCE.emit(
-                    com.example.testes.data.state.AppEvent.ChatMessageSent.INSTANCE
-            );
+            emitAppEvent("ChatMessageSent");
         } catch (JSONException ignored) {}
     }
 
     public static void recordOcrUsed(String token, String topic, int responseTimeSeconds) {
         try {
             int userId = userIdFromToken(token);
-            recordEventWithTopic(
+            recordEventWithMetrics(
                     userId,
                     "ocr_used",
                     topic == null || topic.trim().isEmpty() ? SUBJECT_NAME : topic.trim(),
@@ -579,11 +650,51 @@ public final class LocalBackend {
                     JSONObject.NULL,
                     JSONObject.NULL,
                     JSONObject.NULL,
-                    Math.max(0, responseTimeSeconds)
+                    Math.max(0, responseTimeSeconds),
+                    0,
+                    JSONObject.NULL,
+                    JSONObject.NULL
             );
-            com.example.testes.data.state.AppStateBus.INSTANCE.emit(
-                    com.example.testes.data.state.AppEvent.OcrAnalyzed.INSTANCE
+            emitAppEvent("OcrAnalyzed");
+        } catch (JSONException ignored) {}
+    }
+
+    public static void recordVoiceUsed(String token, boolean remoteVoice) {
+        try {
+            int userId = userIdFromToken(token);
+            recordEventWithMetrics(
+                    userId,
+                    "voice_used",
+                    SUBJECT_NAME,
+                    JSONObject.NULL,
+                    JSONObject.NULL,
+                    JSONObject.NULL,
+                    remoteVoice ? "remota" : "local",
+                    0,
+                    0,
+                    JSONObject.NULL,
+                    JSONObject.NULL
             );
+            emitAppEvent("VoiceUsed");
+        } catch (JSONException ignored) {}
+    }
+
+    public static void saveAdaptiveProfile(
+            String token,
+            int fuzzyScore,
+            String level,
+            String nextTopic,
+            String learningVelocity
+    ) {
+        try {
+            int userId = userIdFromToken(token);
+            JSONObject profile = new JSONObject()
+                    .put("fuzzy_score", Math.max(0, Math.min(100, fuzzyScore)))
+                    .put("level", level == null ? "Intermediário" : level)
+                    .put("next_topic", nextTopic == null ? SUBJECT_NAME : nextTopic)
+                    .put("learning_velocity", learningVelocity == null ? "em formação" : learningVelocity)
+                    .put("updated_at", System.currentTimeMillis());
+            prefs.edit().putString(key(userId, "adaptive_profile"), profile.toString()).apply();
         } catch (JSONException ignored) {}
     }
 
@@ -610,15 +721,13 @@ public final class LocalBackend {
         try {
             int userId = userIdFromToken(token);
             recordEvent(userId, "lesson_opened", lessonId, JSONObject.NULL, JSONObject.NULL, JSONObject.NULL, 0);
-            com.example.testes.data.state.AppStateBus.INSTANCE.emit(
-                    com.example.testes.data.state.AppEvent.LessonOpened.INSTANCE
-            );
+            emitAppEvent("LessonOpened");
         } catch (JSONException ignored) {}
     }
 
     public static void recordChatEvent(String token, String eventType, String topic, int responseTimeSeconds) throws JSONException {
         int userId = userIdFromToken(token);
-        recordEventWithTopic(
+        recordEventWithMetrics(
                 userId,
                 eventType,
                 topic == null || topic.trim().isEmpty() ? SUBJECT_NAME : topic.trim(),
@@ -626,7 +735,10 @@ public final class LocalBackend {
                 JSONObject.NULL,
                 JSONObject.NULL,
                 JSONObject.NULL,
-                Math.max(0, responseTimeSeconds)
+                Math.max(0, responseTimeSeconds),
+                0,
+                JSONObject.NULL,
+                JSONObject.NULL
         );
     }
 
@@ -656,9 +768,7 @@ public final class LocalBackend {
             prefs.edit().putString(key(userId, "track_completed_dimensional"), completed.toString()).apply();
             addStats(userId, 0, 0, 1, 0, 240);
             recordEvent(userId, "track_mission_completed", JSONObject.NULL, missionId, true, "trilha", 240);
-            com.example.testes.data.state.AppStateBus.INSTANCE.emit(
-                    com.example.testes.data.state.AppEvent.TrackMissionCompleted.INSTANCE
-            );
+            emitAppEvent("TrackMissionCompleted");
         }
     }
 
@@ -708,9 +818,7 @@ public final class LocalBackend {
         prefs.edit().putString(key(userId, "daily_instance_" + instanceId), saved.toString()).apply();
         addStats(userId, total, score, 0, 0, 180);
         recordEvent(userId, "daily_instance_completed", JSONObject.NULL, instanceId, score >= total, "misto", 180);
-        com.example.testes.data.state.AppStateBus.INSTANCE.emit(
-                com.example.testes.data.state.AppEvent.DailyChallengeInstanceSubmitted.INSTANCE
-        );
+        emitAppEvent("DailyChallengeInstanceSubmitted");
     }
 
     /** Mantido para back-compat; delega para a sobrecarga com picks. */
@@ -996,20 +1104,55 @@ public final class LocalBackend {
             Object selectedAnswer,
             Object correctAnswer
     ) throws JSONException {
+        recordEventWithMetrics(
+                userId, eventType, topic, lessonId, questionId, isCorrect, difficulty,
+                timeSpentSeconds, timeSpentSeconds, selectedAnswer, correctAnswer
+        );
+    }
+
+    private static void recordEventWithMetrics(
+            int userId,
+            String eventType,
+            String topic,
+            Object lessonId,
+            Object questionId,
+            Object isCorrect,
+            Object difficulty,
+            int responseTimeSeconds,
+            int timeSpentSeconds,
+            Object selectedAnswer,
+            Object correctAnswer
+    ) throws JSONException {
+        String safeType = eventType == null ? "" : eventType.trim();
+        if (safeType.length() < 2 || safeType.length() > 80) return;
+        String safeTopic = topic == null || topic.trim().isEmpty() ? SUBJECT_NAME : topic.trim();
+        if (safeTopic.length() > 120) safeTopic = safeTopic.substring(0, 120);
+        int safeResponse = Math.max(0, Math.min(14_400, responseTimeSeconds));
+        int safeStudy = Math.max(0, Math.min(14_400, timeSpentSeconds));
         JSONArray events = jsonArray(key(userId, "learning_events"));
+        if (events.length() > 0) {
+            JSONObject last = events.optJSONObject(events.length() - 1);
+            long now = System.currentTimeMillis();
+            if (last != null
+                    && safeType.equals(last.optString("event_type"))
+                    && String.valueOf(questionId).equals(String.valueOf(last.opt("question_id")))
+                    && now - last.optLong("timestamp") < 1_000L) {
+                return;
+            }
+        }
         events.put(new JSONObject()
                 .put("id", "event-" + System.currentTimeMillis() + "-" + events.length())
                 .put("user_id", userId)
-                .put("event_type", eventType)
-                .put("topic", topic)
+                .put("event_type", safeType)
+                .put("topic", safeTopic)
                 .put("lesson_id", lessonId)
                 .put("question_id", questionId)
                 .put("selected_answer", selectedAnswer)
                 .put("correct_answer", correctAnswer)
                 .put("is_correct", isCorrect)
                 .put("difficulty", difficulty)
-                .put("response_time_seconds", timeSpentSeconds)
-                .put("time_spent_seconds", timeSpentSeconds)
+                .put("response_time_seconds", safeResponse)
+                .put("time_spent_seconds", safeStudy)
                 .put("timestamp", System.currentTimeMillis()));
         events = trimHistory(events, 240);
         prefs.edit().putString(key(userId, "learning_events"), events.toString()).apply();
@@ -1329,58 +1472,92 @@ public final class LocalBackend {
         }
     }
 
+    /**
+     * AGP 9 compiles this Java source before exposing built-in Kotlin classes to
+     * javac. Resolve the Kotlin event bus at runtime so persisted mutations still
+     * notify active ViewModels without a Java-to-Kotlin compile-time dependency.
+     */
+    private static void emitAppEvent(String eventName) {
+        try {
+            Class<?> eventClass = Class.forName(
+                    "com.example.testes.data.state.AppEvent$" + eventName
+            );
+            Object event = eventClass.getField("INSTANCE").get(null);
+            Class<?> busClass = Class.forName("com.example.testes.data.state.AppStateBus");
+            Object bus = busClass.getField("INSTANCE").get(null);
+            for (java.lang.reflect.Method method : busClass.getMethods()) {
+                if (method.getName().equals("emit") && method.getParameterCount() == 1) {
+                    method.invoke(bus, event);
+                    return;
+                }
+            }
+        } catch (ReflectiveOperationException ignored) {
+            // Best-effort refresh: the underlying local mutation already succeeded.
+        }
+    }
+
     private static final class Tutor {
         private static String answer(String message) {
             String lower = message == null ? "" : message.toLowerCase(Locale.ROOT);
             if (lower.contains("velocidade") || lower.contains("veloc")) {
-                return "Vamos com calma.\n\n"
-                        + "Velocidade compara o espaco percorrido com o tempo gasto.\n\n"
-                        + "Passos:\n"
-                        + "1. Distancia tem dimensao [L].\n"
-                        + "2. Tempo tem dimensao [T].\n"
-                        + "3. Dividir por tempo significa colocar [T] no denominador.\n\n"
-                        + "Formula destacada:\n"
-                        + "[v] = [L] / [T] = [L][T]^-1\n\n"
-                        + "Entao, velocidade tem dimensao [L][T]^-1.";
+                return "# Dimensão da velocidade\n\n"
+                        + "## Explicação\n\n"
+                        + "A **velocidade** compara o espaço percorrido com o tempo gasto.\n\n"
+                        + "## Pontos principais\n\n"
+                        + "1. Distância tem dimensão `[L]`.\n"
+                        + "2. Tempo tem dimensão `[T]`.\n"
+                        + "3. Dividir por tempo coloca `[T]` no denominador.\n\n"
+                        + "$$\n[v] = [L] / [T] = [L][T]^-1\n$$\n\n"
+                        + "## Resumo\n\n"
+                        + "A velocidade tem dimensão **`[L][T]^-1`**.";
             }
             if (lower.contains("forca") || lower.contains("newton")) {
-                return "Boa pergunta. Vamos usar F = m.a.\n\n"
-                        + "Passos:\n"
-                        + "1. Massa tem dimensao [M].\n"
-                        + "2. Aceleracao tem dimensao [L][T]^-2.\n"
-                        + "3. Multiplicando as duas partes:\n\n"
-                        + "[F] = [M][L][T]^-2\n\n"
-                        + "Por isso, 1 newton equivale a kg.m/s^2.";
+                return "# Dimensão da força\n\n"
+                        + "## Explicação\n\n"
+                        + "Partimos da segunda lei de Newton: **força é massa vezes aceleração**.\n\n"
+                        + "$$\nF = m \\cdot a\n$$\n\n"
+                        + "## Pontos principais\n\n"
+                        + "- Massa: `[M]`.\n"
+                        + "- Aceleração: `[L][T]^-2`.\n"
+                        + "- Multiplicamos as dimensões.\n\n"
+                        + "$$\n[F] = [M][L][T]^-2\n$$\n\n"
+                        + "## Resumo\n\n"
+                        + "Um newton equivale a **`kg·m/s²`**.";
             }
             if (lower.contains("energia") || lower.contains("joule")) {
-                return "Vamos conferir energia pela expressao E = m.v^2.\n\n"
-                        + "1. [m] = [M]\n"
-                        + "2. [v] = [L][T]^-1\n"
-                        + "3. [v^2] = [L]^2[T]^-2\n\n"
-                        + "Formula dimensional:\n"
-                        + "[E] = [M][L]^2[T]^-2\n\n"
-                        + "Essa e a dimensao de energia.";
+                return "# Dimensão da energia\n\n"
+                        + "## Explicação\n\n"
+                        + "Podemos conferir a energia pela relação proporcional `E = mv²`.\n\n"
+                        + "## Pontos principais\n\n"
+                        + "1. `[m] = [M]`\n"
+                        + "2. `[v] = [L][T]^-1`\n"
+                        + "3. `[v²] = [L]²[T]^-2`\n\n"
+                        + "$$\n[E] = [M][L]^2[T]^-2\n$$\n\n"
+                        + "## Resumo\n\n"
+                        + "Essa é a dimensão física da energia.";
             }
             if (lower.contains("como") || lower.contains("passo") || lower.contains("resolver")) {
-                return "O metodo mais seguro e este:\n\n"
+                return "# Como fazer Análise Dimensional\n\n"
+                        + "## Passo a passo\n\n"
                         + "1. Marque todas as grandezas da formula.\n"
                         + "2. Troque cada grandeza por [M], [L] e [T].\n"
                         + "3. Simplifique as potencias.\n"
                         + "4. Compare os dois lados.\n\n"
-                        + "Se os dois lados nao tiverem a mesma dimensao, a formula nao esta coerente.\n\n"
+                        + "> Se os lados não tiverem a mesma dimensão, a fórmula não está coerente.\n\n"
+                        + "## Exemplo\n\n"
                         + "Mande uma formula e eu confiro com voce, passo por passo.";
             }
-            return "Vamos pensar como o titio Renato gosta: primeiro a natureza da grandeza, depois os numeros.\n\n"
-                    + "Regra principal:\n"
-                    + "so podemos somar grandezas da mesma dimensao.\n\n"
-                    + "Para testar uma formula:\n"
+            return "# Regra principal\n\n"
+                    + "Só podemos somar grandezas da **mesma dimensão**.\n\n"
+                    + "## Como testar uma fórmula\n\n"
                     + "1. Troque comprimento por [L].\n"
                     + "2. Troque massa por [M].\n"
                     + "3. Troque tempo por [T].\n"
                     + "4. Simplifique e compare os dois lados.\n\n"
-                    + "Exemplo rapido:\n"
-                    + "v = d/t fica [v] = [L]/[T] = [L][T]^-1.\n\n"
-                    + "Agora me diga a formula ou a parte que travou.";
+                    + "## Exemplo\n\n"
+                    + "$$\n[v] = [L]/[T] = [L][T]^-1\n$$\n\n"
+                    + "## Resumo\n\n"
+                    + "Diga qual fórmula ou etapa travou e eu confiro com você.";
         }
     }
 }

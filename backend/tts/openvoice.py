@@ -61,6 +61,13 @@ class OpenVoiceV2Client:
             raise RuntimeError(f"Source speaker embedding not found: {source_path}")
         return self.torch.load(str(source_path), map_location=self.device)
 
+    def extract_source_embedding(self, source_audio: Path) -> Any:
+        if self.converter is None:
+            raise RuntimeError("OpenVoice V2 converter is not loaded.")
+        if not source_audio.exists():
+            raise RuntimeError(f"Source voice audio not found: {source_audio}")
+        return self.converter.extract_se([str(source_audio)])
+
     def convert(self, source_audio: Path, source_se: Any, output_path: Path) -> OpenVoiceConversionResult:
         if self.converter is None or self.target_se is None:
             raise RuntimeError("OpenVoice V2 converter is not loaded.")

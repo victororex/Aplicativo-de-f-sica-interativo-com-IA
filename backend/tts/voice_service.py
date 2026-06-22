@@ -46,7 +46,7 @@ class VoiceCloneConfig:
 
 
 class ProfessorVoiceService:
-    """MeloTTS -> OpenVoice V2 pipeline cached for low-latency requests."""
+    """PT-BR or MeloTTS base speech converted to the professor's timbre."""
 
     def __init__(self, config: VoiceCloneConfig | None = None) -> None:
         self.config = config or VoiceCloneConfig(
@@ -54,7 +54,7 @@ class ProfessorVoiceService:
             melotts_speaker=getattr(settings, "melotts_speaker", None),
             melotts_speed=float(getattr(settings, "melotts_speed", 1.0)),
         )
-        self.engine = (getattr(settings, "tts_engine", "edge_pt") or "edge_pt").lower()
+        self.engine = (getattr(settings, "tts_engine", "edge_openvoice") or "edge_openvoice").lower()
         self.device = self._detect_device()
         self.melo: MeloTTSClient | None = None
         self.openvoice: OpenVoiceV2Client | None = None
@@ -77,15 +77,40 @@ class ProfessorVoiceService:
                 self.config.tmp_dir.mkdir(parents=True, exist_ok=True)
                 self.config.voices_dir.mkdir(parents=True, exist_ok=True)
 
-                if self.engine == "edge_pt":
+                if self.engine in {"edge_pt", "edge_openvoice"}:
                     self.edge = EdgeTTSClient(
                         voice=getattr(settings, "edge_tts_voice", "pt-BR-AntonioNeural"),
                         rate=getattr(settings, "edge_tts_rate", "+0%"),
                         pitch=getattr(settings, "edge_tts_pitch", "+0Hz"),
                     )
+                if self.engine == "edge_pt":
                     self._loaded = True
                     logger.info("Edge-TTS PT-BR pronto em %.2fs (voice=%s)",
                                 time.perf_counter() - started, self.edge.voice)
+                    return
+
+                if self.engine == "edge_openvoice":
+                    self.openvoice = OpenVoiceV2Client(
+                        checkpoints_dir=self.config.checkpoints_dir,
+                        reference_voice_path=self.config.professor_voice_path,
+                        device=self.device,
+                    )
+                    self.openvoice.load()
+                    calibration_path = self.config.tmp_dir / "edge_pt_calibration.mp3"
+                    try:
+                        calibration = self.edge.synthesize(
+                            "Olá. Esta é uma amostra de voz em português do Brasil."
+                        )
+                        calibration_path.write_bytes(calibration.audio)
+                        self.source_se = self.openvoice.extract_source_embedding(calibration_path)
+                    finally:
+                        calibration_path.unlink(missing_ok=True)
+                    self._loaded = True
+                    logger.info(
+                        "PT-BR voice clone pipeline ready in %.2fs (voice=%s)",
+                        time.perf_counter() - started,
+                        self.edge.voice,
+                    )
                     return
 
                 self.melo = MeloTTSClient(
@@ -134,6 +159,45 @@ class ProfessorVoiceService:
                 request_id, time.perf_counter() - started_total, len(result.audio), result.voice,
             )
             return result.audio
+
+        if self.engine == "edge_openvoice":
+            if self.edge is None or self.openvoice is None or self.source_se is None:
+                raise VoiceCloneUnavailable("Pipeline de voz personalizada em português indisponível.")
+            source_path = self.config.tmp_dir / f"{request_id}_ptbr.mp3"
+            cloned_path = self.config.tmp_dir / f"{request_id}_professor.wav"
+            started_total = time.perf_counter()
+            try:
+                with self._synthesis_lock:
+                    logger.info("[VOICE %s] Edge PT-BR synthesizing", request_id)
+                    source_result = self.edge.synthesize(cleaned[:4000])
+                    source_path.write_bytes(source_result.audio)
+                    logger.info("[VOICE %s] OpenVoice converting PT-BR to professor timbre", request_id)
+                    conversion_result = self.openvoice.convert(
+                        source_path,
+                        self.source_se,
+                        cloned_path,
+                    )
+                audio = conversion_result.path.read_bytes()
+                logger.info(
+                    "[VOICE %s] PT-BR request finished total=%.2fs synthesis=%.2fs conversion=%.2fs bytes=%d",
+                    request_id,
+                    time.perf_counter() - started_total,
+                    source_result.elapsed_seconds,
+                    conversion_result.elapsed_seconds,
+                    len(audio),
+                )
+                return audio
+            except Exception as error:  # noqa: BLE001
+                logger.exception("PT-BR voice clone request failed")
+                raise VoiceCloneUnavailable(
+                    "Falha ao gerar áudio em português com a voz personalizada."
+                ) from error
+            finally:
+                for path in (source_path, cloned_path):
+                    try:
+                        path.unlink(missing_ok=True)
+                    except OSError:
+                        logger.warning("Could not remove temporary audio file: %s", path)
 
         if self.melo is None or self.openvoice is None or self.source_se is None:
             logger.error("[VOICE %s] pipeline state invalid: melo=%s openvoice=%s embedding=%s",
@@ -207,6 +271,22 @@ class ProfessorVoiceService:
                 "audio_generation": self._loaded,
             }
 
+        if self.engine == "edge_openvoice":
+            return {
+                "backend": True,
+                "engine": "edge_pt_br+openvoice",
+                "language": "pt-BR",
+                "voice": getattr(self.edge, "voice", None) if self.edge else None,
+                "professor_voice": professor.exists(),
+                "professor_voice_path": str(professor),
+                "device": self.device,
+                "loaded": self._loaded,
+                "load_error": str(self._load_error) if self._load_error else None,
+                "openvoice": self.openvoice is not None,
+                "embedding": self.source_se is not None,
+                "audio_generation": self._loaded and self.source_se is not None,
+            }
+
         return {
             "backend": True,
             "engine": "melotts+openvoice",
@@ -228,7 +308,16 @@ class ProfessorVoiceService:
 
 
 def prepare_text_for_voice(text: str) -> str:
-    cleaned = re.sub(r"\s+", " ", text or "").strip()
+    cleaned = text or ""
+    cleaned = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", cleaned)
+    cleaned = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", cleaned)
+    cleaned = re.sub(r"(?m)^\s{0,3}#{1,6}\s*", "", cleaned)
+    cleaned = re.sub(r"(?m)^\s*>\s?", "Observação: ", cleaned)
+    cleaned = re.sub(r"(?m)^\s*[-+*]\s+", "", cleaned)
+    cleaned = re.sub(r"(?m)^\s*\d+[.)]\s+", "", cleaned)
+    cleaned = cleaned.replace("$$", "").replace(r"\[", "").replace(r"\]", "")
+    cleaned = re.sub(r"[*_~`]", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
     return (
         cleaned.replace("Dados do problema:", "Vamos pelos dados do problema.")
         .replace("Fórmula usada:", "A fórmula usada é:")

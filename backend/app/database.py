@@ -18,7 +18,7 @@ DATABASE_FILE = _resolve_path(settings.database_path)
 
 def get_connection() -> sqlite3.Connection:
     DATABASE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(DATABASE_FILE)
+    connection = sqlite3.connect(DATABASE_FILE, check_same_thread=False)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     return connection
@@ -187,6 +187,16 @@ def init_db() -> None:
                 completed_at TEXT,
                 duration_seconds INTEGER NOT NULL DEFAULT 0,
                 is_completed INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS adaptive_profiles (
+                user_id INTEGER PRIMARY KEY,
+                fuzzy_score INTEGER NOT NULL DEFAULT 50 CHECK(fuzzy_score BETWEEN 0 AND 100),
+                level TEXT NOT NULL DEFAULT 'Intermediário',
+                next_topic TEXT NOT NULL DEFAULT 'Fisica',
+                learning_velocity TEXT NOT NULL DEFAULT 'em formação',
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
 

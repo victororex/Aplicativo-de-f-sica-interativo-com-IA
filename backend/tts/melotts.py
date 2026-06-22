@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
-import os
+import importlib
+import sys
 import time
+import types
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -11,11 +13,60 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
-def _prefer_local_model_cache() -> None:
-    """Avoid slow network retries when MeloTTS/OpenVoice assets are already cached."""
-    os.environ.setdefault("HF_HUB_OFFLINE", "1")
-    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
-    os.environ.setdefault("HF_DATASETS_OFFLINE", "1")
+def _install_lazy_text_cleaner() -> None:
+    """Prevent MeloTTS from loading tokenizers for every supported language."""
+    module_name = "melo.text.cleaner"
+    if module_name in sys.modules:
+        return
+
+    language_modules = {
+        "ZH": "chinese",
+        "JP": "japanese",
+        "EN": "english",
+        "ZH_MIX_EN": "chinese_mix",
+        "KR": "korean",
+        "FR": "french",
+        "SP": "spanish",
+        "ES": "spanish",
+    }
+    cleaner = types.ModuleType(module_name)
+
+    def language_module(language: str):
+        name = language_modules.get(language)
+        if name is None:
+            raise ValueError(f"Unsupported MeloTTS language: {language}")
+        return importlib.import_module(f"melo.text.{name}")
+
+    def clean_text(text: str, language: str):
+        selected = language_module(language)
+        normalized = selected.text_normalize(text)
+        phones, tones, word2ph = selected.g2p(normalized)
+        return normalized, phones, tones, word2ph
+
+    def clean_text_bert(text: str, language: str, device=None):
+        normalized, phones, tones, word2ph = clean_text(text, language)
+        original_word2ph = list(word2ph)
+        doubled_word2ph = [count * 2 for count in word2ph]
+        if doubled_word2ph:
+            doubled_word2ph[0] += 1
+        bert = language_module(language).get_bert_feature(
+            normalized,
+            doubled_word2ph,
+            device=device,
+        )
+        return normalized, phones, tones, original_word2ph, bert
+
+    def text_to_sequence(text: str, language: str):
+        from melo.text import cleaned_text_to_sequence
+
+        normalized, phones, tones, _ = clean_text(text, language)
+        del normalized
+        return cleaned_text_to_sequence(phones, tones, language)
+
+    cleaner.clean_text = clean_text
+    cleaner.clean_text_bert = clean_text_bert
+    cleaner.text_to_sequence = text_to_sequence
+    sys.modules[module_name] = cleaner
 
 
 @dataclass
@@ -46,7 +97,7 @@ class MeloTTSClient:
     def load(self) -> None:
         started = time.perf_counter()
         logger.info("Loading MeloTTS model language=%s device=%s", self.language, self.device)
-        _prefer_local_model_cache()
+        _install_lazy_text_cleaner()
         import nltk
 
         nltk_data_dir = Path(__file__).resolve().parents[1] / "nltk_data"

@@ -65,8 +65,19 @@ def send_message(
         db.execute("UPDATE chat_sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", (session_id,))
         db.execute(
             """
-            INSERT INTO analytics_events (user_id, event_type, topic, time_spent_seconds)
-            VALUES (?, 'chat_question_sent', ?, ?)
+            INSERT INTO analytics_events (
+                user_id, event_type, topic, response_time_seconds, time_spent_seconds
+            )
+            VALUES (?, 'chat_question_sent', ?, ?, 0)
+            """,
+            (user_id, request.context_topic or request.subject or "Fisica", elapsed_seconds),
+        )
+        db.execute(
+            """
+            INSERT INTO analytics_events (
+                user_id, event_type, topic, response_time_seconds, time_spent_seconds
+            )
+            VALUES (?, 'chat_response_received', ?, ?, 0)
             """,
             (user_id, request.context_topic or request.subject or "Fisica", elapsed_seconds),
         )
@@ -89,6 +100,7 @@ def send_message(
 @router.post("/speech")
 def synthesize_speech(
     request: SpeechRequest,
+    db: sqlite3.Connection = Depends(get_db),
     current_user: sqlite3.Row | None = Depends(get_optional_user),
 ):
     user_id = current_user["id"] if current_user else None
@@ -101,6 +113,15 @@ def synthesize_speech(
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
+    db.execute(
+        """
+        INSERT INTO analytics_events (
+            user_id, event_type, topic, response_time_seconds, time_spent_seconds
+        ) VALUES (?, 'voice_used', 'Fisica', 0, 0)
+        """,
+        (user_id,),
+    )
+    db.commit()
     return Response(content=audio, media_type="audio/wav")
 
 

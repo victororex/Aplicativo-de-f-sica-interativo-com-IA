@@ -60,7 +60,8 @@ def test_dashboard_detects_weak_topic_and_recommends_review():
 
     assert dashboard["questions_answered"] == 4
     assert dashboard["accuracy_rate"] == 25
-    assert dashboard["adaptive_profile"]["exercise_difficulty"] == "Facil"
+    assert dashboard["adaptive_profile"]["exercise_difficulty"] in {"Muito Fácil", "Fácil"}
+    assert 0 <= dashboard["adaptive_profile"]["fuzzy_score"] <= 100
     assert dashboard["adaptive_profile"]["next_topic"] == "Dinamica"
     assert dashboard["difficult_topics"][0]["needs_review"] is True
     assert dashboard["completed_sessions"] == 1
@@ -75,3 +76,24 @@ def test_dashboard_preserves_empty_state_contract():
     assert len(dashboard["weekly_evolution"]) == 6
     assert len(dashboard["monthly_evolution"]) == 6
     assert dashboard["recommendations"][0]["title"] == "Crie sua linha de base"
+    assert dashboard["ocr_uses"] == 0
+    assert dashboard["voice_uses"] == 0
+
+
+def test_chat_activity_populates_history_and_evolution_without_fake_mastery():
+    db = analytics_db()
+    db.execute(
+        """
+        INSERT INTO analytics_events VALUES
+        (1, 7, 'chat_question_sent', 'Cinematica', NULL, NULL, 2, 0, '2026-06-15 10:00:00')
+        """
+    )
+    db.execute("INSERT INTO messages VALUES (1, 7, 'user')")
+    db.commit()
+
+    dashboard = get_learning_dashboard(db, 7, now=datetime(2026, 6, 15, 12, 0))
+
+    assert dashboard["daily_evolution"][-1]["activities"] == 1
+    assert dashboard["performance_history"][0]["activity"] == "Chat com Renato"
+    assert dashboard["topic_performance"] == []
+    assert dashboard["accuracy_rate"] == 0

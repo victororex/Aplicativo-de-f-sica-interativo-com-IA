@@ -23,6 +23,7 @@ import com.example.testes.model.SectionStyle
 import com.example.testes.model.Subject
 import com.example.testes.model.User
 import java.io.File
+import java.text.Normalizer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -110,7 +111,10 @@ class HomeViewModel(
         viewModelScope.launch {
             learningApiClient.getDailyChallengeStatus()
                 .onSuccess { status ->
-                    _showQuizPopup.value = !status.completedToday
+                    _showQuizPopup.value = !status.completedToday &&
+                        SessionManager.accessToken?.let(
+                            LocalBackend::shouldShowDailyChallengePrompt
+                        ) == true
                 }
                 .onFailure {
                     _showQuizPopup.value = false
@@ -119,10 +123,12 @@ class HomeViewModel(
     }
 
     fun dismissQuizPopup() {
+        SessionManager.accessToken?.let(LocalBackend::dismissDailyChallengePrompt)
         _showQuizPopup.value = false
     }
 
     fun completeQuiz() {
+        SessionManager.accessToken?.let(LocalBackend::dismissDailyChallengePrompt)
         _showQuizPopup.value = false
     }
 }
@@ -215,6 +221,7 @@ class ChatViewModel(
     val suggestedQuestions: StateFlow<List<String>> = _suggestedQuestions
     private var adaptiveLevel = "intermediario, com exemplos guiados"
     private var adaptiveTopic = "Analise Dimensional"
+    private var relatedLessonCandidates: List<Pair<Lesson, String>>? = null
 
     init {
         loadHistory()
@@ -270,7 +277,13 @@ class ChatViewModel(
                 ?: "Não consegui responder agora porque a conexão com a IA falhou. Tente novamente em instantes ou revise a aula de Análise Dimensional."
 
             val answerTime = System.currentTimeMillis()
-            val aiMsg = ChatMessage("ai-$answerTime-${_messages.value.size}", answer, false, answerTime)
+            val aiMsg = ChatMessage(
+                id = "ai-$answerTime-${_messages.value.size}",
+                text = answer,
+                isFromUser = false,
+                timestamp = answerTime,
+                relatedLesson = findRelatedLesson(answer)
+            )
             _messages.value = _messages.value + aiMsg
             _statusMessage.value = responseValue?.fallbackReason
             _lastFailedPrompt.value = if (response.isFailure || responseValue?.fallbackReason != null) text.trim() else null
@@ -284,7 +297,12 @@ class ChatViewModel(
     }
 
     /** Envia um anexo (foto/imagem/PDF já convertido para JPG) processando OCR via /formula/analyze. */
-    fun sendAttachment(compressedImage: File, displayUri: String, kind: AttachmentKind) {
+    fun sendAttachment(
+        compressedImage: File,
+        displayUri: String,
+        kind: AttachmentKind,
+        startedAt: Long = System.currentTimeMillis()
+    ) {
         if (_isSending.value) return
         val now = System.currentTimeMillis()
         val userMsg = ChatMessage(
@@ -316,9 +334,14 @@ class ChatViewModel(
             result.onSuccess { analysis ->
                 SessionManager.accessToken?.let { token ->
                     val topic = analysis.problemStatement.take(80).ifBlank { "Análise Dimensional" }
-                    LocalBackend.recordOcrUsed(token, topic, 0)
+                    val elapsedSeconds = ((System.currentTimeMillis() - startedAt) / 1000L)
+                        .coerceIn(0L, 14_400L)
+                        .toInt()
+                    LocalBackend.recordOcrUsed(token, topic, elapsedSeconds)
                 }
-                val related = findRelatedLesson(analysis)
+                val related = findRelatedLesson(
+                    analysis.problemStatement + " " + analysis.finalAnswer + " " + analysis.latex
+                )
                 val aiMsg = ChatMessage(
                     id = "ai-att-${System.currentTimeMillis()}",
                     text = analysis.problemStatement.ifBlank { "Aqui está a análise da imagem." },
@@ -361,6 +384,25 @@ class ChatViewModel(
         if (analysis.problemStatement.isNotBlank()) {
             sections += MessageSection("🔎", "O que encontrei", analysis.problemStatement)
         }
+        if (analysis.visualDescription.isNotBlank()) {
+            sections += MessageSection(
+                "👁️",
+                when (analysis.contentType.lowercase()) {
+                    "graph" -> "Leitura do gráfico"
+                    "table" -> "Leitura da tabela"
+                    "circuit" -> "Leitura do circuito"
+                    "diagram" -> "Leitura do diagrama"
+                    else -> "Análise visual"
+                },
+                buildString {
+                    append(analysis.visualDescription)
+                    if (analysis.structuredData.isNotEmpty()) {
+                        append("\n\n")
+                        analysis.structuredData.forEach { append("• ").append(it).append('\n') }
+                    }
+                }.trim()
+            )
+        }
         if (analysis.latex.isNotBlank()) {
             sections += MessageSection("🧮", "Fórmula", analysis.latex, SectionStyle.Formula)
         }
@@ -385,23 +427,44 @@ class ChatViewModel(
         return sections
     }
 
-    private suspend fun findRelatedLesson(analysis: FormulaAnalysis): RelatedLesson? {
-        val haystack = (analysis.problemStatement + " " + analysis.finalAnswer).lowercase()
+    private suspend fun findRelatedLesson(text: String): RelatedLesson? {
+        val haystack = text.normalizedForLessonMatch()
         if (haystack.isBlank()) return null
-        val subjects = contentApiClient.getSubjects().getOrNull().orEmpty()
-        for (subject in subjects) {
-            val lessons = contentApiClient.getLessons(subject.id).getOrNull().orEmpty()
-            val match = lessons.firstOrNull { lesson ->
-                val tokens = lesson.title.lowercase().split(" ").filter { it.length > 3 }
-                tokens.any { haystack.contains(it) } ||
-                    haystack.contains(subject.name.lowercase().take(8))
+
+        val candidates = relatedLessonCandidates ?: buildList {
+            contentApiClient.getSubjects().getOrNull().orEmpty().forEach { subject ->
+                contentApiClient.getLessons(subject.id).getOrNull().orEmpty().forEach { lesson ->
+                    add(lesson to subject.name)
+                }
             }
-            if (match != null) {
-                return RelatedLesson(match.id, match.title, subject.name)
+        }.also { relatedLessonCandidates = it }
+
+        val scored = candidates.map { (lesson, subjectName) ->
+            val searchable = "${lesson.title} ${lesson.description} $subjectName"
+                .normalizedForLessonMatch()
+            val tokens = searchable.split(" ")
+                .filter { it.length >= 5 && it !in LESSON_MATCH_STOP_WORDS }
+                .distinct()
+            Triple(lesson, subjectName, tokens.count(haystack::contains))
+        }.maxByOrNull { it.third }
+
+        return scored
+            ?.takeIf { it.third > 0 }
+            ?.let { (lesson, subjectName) ->
+                RelatedLesson(lesson.id, lesson.title, subjectName)
             }
-        }
-        return null
     }
+}
+
+private val LESSON_MATCH_STOP_WORDS = setOf(
+    "sobre", "entre", "depois", "antes", "fisica", "analise", "dimensional"
+)
+
+private fun String.normalizedForLessonMatch(): String {
+    return Normalizer.normalize(lowercase(), Normalizer.Form.NFD)
+        .replace(Regex("""\p{M}+"""), "")
+        .replace(Regex("""[^\p{L}\p{N}]+"""), " ")
+        .trim()
 }
 
 class ProfileViewModel(
@@ -455,6 +518,7 @@ class DashboardViewModel(
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage
+    private var loadJob: kotlinx.coroutines.Job? = null
 
     init {
         load()
@@ -464,7 +528,8 @@ class DashboardViewModel(
     }
 
     fun load() {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             _isLoading.value = true
             runCatching {
                 kotlinx.coroutines.withTimeout(10_000L) {

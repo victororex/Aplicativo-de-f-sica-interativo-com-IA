@@ -4,6 +4,12 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 import sqlite3
 
+from app.services.fuzzy_learning_service import (
+    FuzzyInputs,
+    infer_fuzzy_level,
+    response_speed_from_seconds,
+)
+
 
 def get_improvement_stats(db: sqlite3.Connection, user_id: int | None = None) -> dict:
     dashboard = get_learning_dashboard(db, user_id)
@@ -52,7 +58,30 @@ def get_learning_dashboard(
     recent_accuracy = _accuracy(attempts[:5])
     previous_accuracy = _accuracy(attempts[5:10])
     trend = _trend(len(attempts), recent_accuracy, previous_accuracy)
-    difficulty = _difficulty(len(attempts), recent_accuracy, topic_performance)
+    total_lessons = int(db.execute("SELECT COUNT(*) AS total FROM lessons").fetchone()["total"])
+    completed_lessons = 0
+    if user_id is not None:
+        completed_lessons = int(
+            db.execute(
+                "SELECT COUNT(*) AS total FROM lesson_progress WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()["total"]
+        )
+    total_phases = int(progress["total_phases"]) if progress else total_lessons
+    completed_phases = int(progress["completed_phases"]) if progress else completed_lessons
+    response_times = [int(row["response_time_seconds"]) for row in attempts if row["response_time_seconds"] > 0]
+    average_response = round(sum(response_times) / len(response_times)) if response_times else 0
+    active_days = len({_parse_date(row["created_at"]).date() for row in events})
+    fuzzy = infer_fuzzy_level(
+        FuzzyInputs(
+            accuracy=float(recent_accuracy if attempts else 45),
+            response_speed=response_speed_from_seconds(average_response),
+            study_frequency=min(100.0, active_days * 100.0 / 12.0),
+            mission_progress=float(_percentage(completed_phases, total_phases)),
+            lesson_progress=float(_percentage(completed_lessons, total_lessons)),
+        )
+    )
+    difficulty = fuzzy.level
     next_topic = (
         difficult_topics[0]["topic"]
         if difficult_topics
@@ -60,6 +89,18 @@ def get_learning_dashboard(
         if topic_performance
         else "Fisica"
     )
+    learning_velocity = (
+        "em formação" if len(attempts) < 4
+        else "acelerando" if recent_accuracy >= previous_accuracy + 10
+        else "desacelerando" if recent_accuracy + 10 <= previous_accuracy
+        else "constante"
+    )
+    attempted_topics = {(row["topic"] or "Fisica").strip().lower() for row in attempts}
+    ignored_topics = list(dict.fromkeys(
+        (row["topic"] or "Fisica").strip()
+        for row in events
+        if (row["topic"] or "Fisica").strip().lower() not in attempted_topics
+    ))[:3]
     profile = {
         "explanation_level": _explanation_level(len(attempts), recent_accuracy),
         "exercise_difficulty": difficulty,
@@ -72,6 +113,9 @@ def get_learning_dashboard(
             f"Quais erros devo evitar em {next_topic}?",
             f"Crie uma questao {difficulty} sobre {next_topic}.",
         ],
+        "fuzzy_score": fuzzy.score,
+        "learning_velocity": learning_velocity,
+        "ignored_topics": ignored_topics,
     }
 
     session_row = db.execute(
@@ -85,23 +129,33 @@ def get_learning_dashboard(
         f"SELECT COUNT(*) AS total FROM messages WHERE sender = 'user' AND {clause}",
         params,
     ).fetchone()
-    total_lessons = int(db.execute("SELECT COUNT(*) AS total FROM lessons").fetchone()["total"])
-    completed_lessons = 0
-    if user_id is not None:
-        completed_lessons = int(
-            db.execute(
-                "SELECT COUNT(*) AS total FROM lesson_progress WHERE user_id = ?",
-                (user_id,),
-            ).fetchone()["total"]
-        )
-    total_phases = int(progress["total_phases"]) if progress else total_lessons
-    completed_phases = int(progress["completed_phases"]) if progress else completed_lessons
-
     recommendations = _recommendations(profile, difficult_topics, answered, accuracy)
-    response_times = [int(row["response_time_seconds"]) for row in attempts if row["response_time_seconds"] > 0]
-    event_study_seconds = sum(max(0, int(row["time_spent_seconds"])) for row in events)
+    session_events_seconds = sum(
+        max(0, int(row["time_spent_seconds"]))
+        for row in events
+        if row["event_type"] == "study_session_completed"
+    )
+    if user_id is not None:
+        try:
+            db.execute(
+                """
+                INSERT INTO adaptive_profiles (
+                    user_id, fuzzy_score, level, next_topic, learning_velocity, updated_at
+                ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    fuzzy_score = excluded.fuzzy_score,
+                    level = excluded.level,
+                    next_topic = excluded.next_topic,
+                    learning_velocity = excluded.learning_velocity,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (user_id, fuzzy.score, fuzzy.level, next_topic, learning_velocity),
+            )
+            db.commit()
+        except sqlite3.OperationalError:
+            pass
     return {
-        "total_study_seconds": max(int(session_row["seconds"]), event_study_seconds),
+        "total_study_seconds": max(int(session_row["seconds"]), session_events_seconds),
         "questions_answered": answered,
         "questions_asked": int(chat_row["total"]),
         "completed_sessions": int(session_row["completed"]),
@@ -116,10 +170,25 @@ def get_learning_dashboard(
         "weekly_evolution": _series(events, attempts, now, "week", 6),
         "monthly_evolution": _series(events, attempts, now, "month", 6),
         "accuracy_rate": accuracy,
-        "average_response_time_seconds": round(sum(response_times) / len(response_times)) if response_times else 0,
-        "performance_history": [_history_item(row) for row in attempts[:20]],
+        "average_response_time_seconds": average_response,
+        "performance_history": [
+            _history_item(row)
+            for row in events
+            if row["event_type"] in HISTORY_EVENTS
+        ][:20],
         "recommendations": recommendations,
         "adaptive_profile": profile,
+        "ai_interactions": sum(row["event_type"] == "chat_question_sent" for row in events),
+        "ocr_uses": sum(row["event_type"] == "ocr_used" for row in events),
+        "voice_uses": sum(row["event_type"] == "voice_used" for row in events),
+        "missions_completed": sum(
+            row["event_type"] in {
+                "campaign_stage_completed", "track_mission_completed",
+                "daily_instance_completed", "daily_challenge_completed",
+            }
+            for row in events
+        ),
+        "active_study_days": active_days,
     }
 
 
@@ -168,6 +237,7 @@ def _series(
                 "accuracy_rate": _accuracy(period_attempts),
                 "study_seconds": sum(max(0, int(row["time_spent_seconds"])) for row in period_events),
                 "questions": len(period_attempts),
+                "activities": sum(row["event_type"] in ACTIVITY_EVENTS for row in period_events),
             }
         )
     return output
@@ -220,12 +290,29 @@ def _recommendations(profile: dict, weak: list[dict], answered: int, accuracy: i
 
 
 def _history_item(row: sqlite3.Row) -> dict:
+    event_type = row["event_type"]
+    activity, result, difficulty = {
+        "exercise_answered": (
+            "Exercício",
+            "Correta" if row["is_correct"] else "Revisar",
+            row["difficulty"] or "Não informada",
+        ),
+        "chat_question_sent": ("Chat com Renato", "Pergunta enviada", "IA"),
+        "lesson_opened": ("Aula", "Aula acessada", "Estudo"),
+        "lesson_completed": ("Aula", "Aula concluída", "Estudo"),
+        "ocr_used": ("Análise de imagem", "OCR concluído", "IA"),
+        "voice_used": ("Voz personalizada", "Áudio reproduzido", "IA"),
+        "campaign_stage_completed": ("Missão", "Missão concluída", row["difficulty"] or "Trilha"),
+        "track_mission_completed": ("Missão", "Missão concluída", row["difficulty"] or "Trilha"),
+        "daily_instance_completed": ("Desafio diário", "Desafio concluído", row["difficulty"] or "Misto"),
+        "daily_challenge_completed": ("Desafio diário", "Desafio concluído", row["difficulty"] or "Misto"),
+    }.get(event_type, ("Atividade", "Concluída", row["difficulty"] or "Geral"))
     return {
         "id": str(row["id"]),
         "topic": row["topic"] or "Fisica",
-        "activity": "Exercicio",
-        "result": "Correta" if row["is_correct"] else "Revisar",
-        "difficulty": row["difficulty"] or "Nao informada",
+        "activity": activity,
+        "result": result,
+        "difficulty": difficulty,
         "response_time_seconds": int(row["response_time_seconds"]),
         "timestamp": _parse_date(row["created_at"]),
     }
@@ -255,6 +342,14 @@ def _trend(attempts: int, recent: int, previous: int) -> str:
     if recent + 10 <= previous:
         return "atencao"
     return "estavel"
+
+
+ACTIVITY_EVENTS = {
+    "lesson_opened", "lesson_completed", "exercise_answered", "chat_question_sent",
+    "ocr_used", "voice_used", "track_mission_completed", "campaign_stage_completed",
+    "daily_instance_completed", "daily_challenge_completed",
+}
+HISTORY_EVENTS = ACTIVITY_EVENTS
 
 
 def _difficulty(attempts: int, recent: int, topics: list[dict]) -> str:
